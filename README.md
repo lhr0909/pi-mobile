@@ -27,9 +27,11 @@ The implementation follows the research decision: **SDK-hosted TypeScript daemon
 - Connects to a configured host URL and optional token.
 - Seeds the session path from the host's absolute cwd after connect; the connection screen expects an absolute workspace path before opening a new session.
 - Opens a new Pi session for that workspace path, then switches into the session view.
-- Shows live status, tool, thinking, user, and assistant timeline items with a dark monospaced style based on Pi's session export/TUI palette.
+- Shows live status, expanded tool, thinking, user, and assistant timeline items with a dark monospaced style based on Pi's session export/TUI palette.
+- Keeps streamed thinking/text blocks and tool calls in event order, with tool input/output shown fully expanded for now.
+- Renders user, thinking, and assistant text as Markdown.
 - Records accepted mobile prompts as user timeline cards so the submitted message appears before assistant output.
-- Shows a compact `Working....` indicator while Pi is streaming/compacting instead of adding `Agent started` / `Agent finished` timeline prompts.
+- Shows a compact animated TUI-style `Working...` spinner while Pi is streaming/compacting instead of adding `Agent started` / `Agent finished` timeline prompts.
 - Includes a collapsible session header for reducing metadata height during active chat.
 - Sends prompt, steer, follow-up, and abort commands from a TUI-like composer.
 

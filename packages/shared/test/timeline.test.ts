@@ -22,7 +22,7 @@ describe("timeline projection", () => {
       now: new Date("2026-05-15T00:00:00.000Z"),
       event: {
         type: "message_update",
-        assistantMessageEvent: { type: "text_delta", delta: "Hello" },
+        assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "Hello" },
       },
     });
     const second = projectPiEvent(state, {
@@ -30,7 +30,7 @@ describe("timeline projection", () => {
       seq: 2,
       event: {
         type: "message_update",
-        assistantMessageEvent: { type: "text_delta", delta: " world" },
+        assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: " world" },
       },
     });
 
@@ -62,7 +62,7 @@ describe("timeline projection", () => {
       now: new Date("2026-05-15T00:00:03.000Z"),
       event: {
         type: "message_update",
-        assistantMessageEvent: { type: "thinking_delta", delta: "Considering options" },
+        assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "Considering options" },
       },
     });
 
@@ -79,6 +79,96 @@ describe("timeline projection", () => {
         },
       },
       { type: "timeline_delta", sessionId: "s1", seq: 3, itemId: "thinking-1", delta: "Considering options" },
+    ]);
+  });
+
+  it("starts a new thinking block when a new assistant message begins", () => {
+    const state = createTimelineProjectionState();
+
+    const firstThinking = projectPiEvent(state, {
+      sessionId: "s1",
+      seq: 1,
+      event: {
+        type: "message_update",
+        assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "Before tool" },
+      },
+    });
+    const tool = projectPiEvent(state, {
+      sessionId: "s1",
+      seq: 2,
+      event: {
+        type: "tool_execution_start",
+        toolCallId: "tool-1",
+        toolName: "read",
+        args: { path: "README.md" },
+      },
+    });
+    const messageStart = projectPiEvent(state, {
+      sessionId: "s1",
+      seq: 3,
+      event: { type: "message_start", message: { role: "assistant", content: [] } },
+    });
+    const secondThinking = projectPiEvent(state, {
+      sessionId: "s1",
+      seq: 4,
+      event: {
+        type: "message_update",
+        assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "After tool" },
+      },
+    });
+
+    expect(firstThinking[0]).toMatchObject({ type: "timeline_item", item: { id: "thinking-1", kind: "thinking" } });
+    expect(tool).toEqual([
+      {
+        type: "timeline_item",
+        sessionId: "s1",
+        seq: 2,
+        item: {
+          id: "tool-1",
+          kind: "tool",
+          title: "read",
+          status: "running",
+          args: { path: "README.md" },
+          createdAt: expect.any(String),
+        },
+      },
+    ]);
+    expect(messageStart).toEqual([]);
+    expect(secondThinking[0]).toMatchObject({ type: "timeline_item", item: { id: "thinking-2", kind: "thinking" } });
+  });
+
+  it("updates tool items with expanded result text", () => {
+    const state = createTimelineProjectionState();
+
+    const events = projectPiEvent(state, {
+      sessionId: "s1",
+      seq: 10,
+      now: new Date("2026-05-15T00:00:10.000Z"),
+      event: {
+        type: "tool_execution_end",
+        toolCallId: "tool-1",
+        toolName: "bash",
+        args: { command: "git status --short" },
+        isError: false,
+        result: { content: [{ type: "text", text: " M README.md" }], details: {} },
+      },
+    });
+
+    expect(events).toEqual([
+      {
+        type: "timeline_item",
+        sessionId: "s1",
+        seq: 10,
+        item: {
+          id: "tool-1",
+          kind: "tool",
+          title: "bash",
+          status: "done",
+          args: { command: "git status --short" },
+          detail: " M README.md",
+          createdAt: "2026-05-15T00:00:10.000Z",
+        },
+      },
     ]);
   });
 

@@ -156,7 +156,12 @@ export class SdkSessionRunner implements SessionRunner {
 
   private applyTimelineEvent(event: HostEvent): void {
     if (event.type === "timeline_item") {
-      this.timeline.push(event.item);
+      const existingIndex = this.timeline.findIndex(item => item.id === event.item.id);
+      if (existingIndex === -1) {
+        this.timeline.push(event.item);
+      } else {
+        this.timeline[existingIndex] = event.item;
+      }
       return;
     }
 

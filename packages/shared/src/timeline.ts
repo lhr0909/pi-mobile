@@ -1,8 +1,8 @@
 import type { HostEvent, JsonObject, JsonValue, SessionState, TimelineItem } from "./protocol.js";
 
 export interface TimelineProjectionState {
-  activeAssistantItemId?: string;
-  activeThinkingItemId?: string;
+  activeAssistantItemIds: Record<string, string>;
+  activeThinkingItemIds: Record<string, string>;
   nextSyntheticId: number;
 }
 
@@ -14,7 +14,7 @@ export interface ProjectionInput {
 }
 
 export function createTimelineProjectionState(): TimelineProjectionState {
-  return { nextSyntheticId: 1 };
+  return { activeAssistantItemIds: {}, activeThinkingItemIds: {}, nextSyntheticId: 1 };
 }
 
 export function projectPiEvent(
@@ -36,12 +36,19 @@ export function projectPiEvent(
     case "agent_end":
       resetActiveMessageItems(state);
       return [];
+    case "message_start":
+      if (messageRole(input.event) === "assistant") {
+        resetActiveMessageItems(state);
+      }
+      return [];
     case "message_update":
       return projectMessageUpdate(state, input, input.event, createdAt);
     case "tool_execution_start":
       return [timelineItem(input, toolItem(state, input.event, "running", createdAt))];
+    case "tool_execution_update":
+      return [timelineItem(input, toolItem(state, input.event, "running", createdAt))];
     case "tool_execution_end":
-      return [timelineItem(input, toolItem(state, input.event, "done", createdAt))];
+      return [timelineItem(input, toolItem(state, input.event, toolStatus(input.event), createdAt))];
     default:
       return [];
   }
@@ -88,16 +95,15 @@ function projectMessageUpdate(
     : undefined;
   const eventType = asString(assistantMessageEvent?.type);
   const delta = asString(assistantMessageEvent?.delta);
+  const contentIndex = asNumber(assistantMessageEvent?.contentIndex);
   if (!eventType || !delta) {
     return [];
   }
 
   if (eventType === "thinking_delta") {
     return projectStreamingText(state, input, {
-      activeItemId: state.activeThinkingItemId,
-      assignActiveItemId: itemId => {
-        state.activeThinkingItemId = itemId;
-      },
+      activeItemIds: state.activeThinkingItemIds,
+      contentIndex,
       createdAt,
       delta,
       kind: "thinking",
@@ -107,10 +113,8 @@ function projectMessageUpdate(
 
   if (eventType === "text_delta") {
     return projectStreamingText(state, input, {
-      activeItemId: state.activeAssistantItemId,
-      assignActiveItemId: itemId => {
-        state.activeAssistantItemId = itemId;
-      },
+      activeItemIds: state.activeAssistantItemIds,
+      contentIndex,
       createdAt,
       delta,
       kind: "assistant",
@@ -122,8 +126,8 @@ function projectMessageUpdate(
 }
 
 interface StreamingTextProjectionOptions {
-  activeItemId: string | undefined;
-  assignActiveItemId: (itemId: string) => void;
+  activeItemIds: Record<string, string>;
+  contentIndex: number | undefined;
   createdAt: string;
   delta: string;
   kind: "assistant" | "thinking";
@@ -135,9 +139,11 @@ function projectStreamingText(
   input: ProjectionInput,
   options: StreamingTextProjectionOptions,
 ): HostEvent[] {
-  if (!options.activeItemId) {
+  const key = String(options.contentIndex ?? "default");
+  const activeItemId = options.activeItemIds[key];
+  if (!activeItemId) {
     const itemId = syntheticId(state, options.prefix);
-    options.assignActiveItemId(itemId);
+    options.activeItemIds[key] = itemId;
     const item: TimelineItem = {
       id: itemId,
       kind: options.kind,
@@ -147,12 +153,12 @@ function projectStreamingText(
     return [timelineItem(input, item), timelineDelta(input, item.id, options.delta)];
   }
 
-  return [timelineDelta(input, options.activeItemId, options.delta)];
+  return [timelineDelta(input, activeItemId, options.delta)];
 }
 
 function resetActiveMessageItems(state: TimelineProjectionState): void {
-  delete state.activeAssistantItemId;
-  delete state.activeThinkingItemId;
+  state.activeAssistantItemIds = {};
+  state.activeThinkingItemIds = {};
 }
 
 function timelineItem(input: ProjectionInput, item: TimelineItem): HostEvent {
@@ -163,31 +169,86 @@ function timelineDelta(input: ProjectionInput, itemId: string, delta: string): H
   return { type: "timeline_delta", sessionId: input.sessionId, itemId, delta, seq: input.seq };
 }
 
-function statusItem(
-  state: TimelineProjectionState,
-  text: string,
-  tone: "info" | "success" | "warning" | "error",
-  createdAt: string,
-): TimelineItem {
-  return { id: syntheticId(state, "status"), kind: "status", text, tone, createdAt };
-}
-
 function toolItem(
   state: TimelineProjectionState,
   event: JsonObject,
-  status: "running" | "done",
+  status: "running" | "done" | "error",
   createdAt: string,
 ): TimelineItem {
   const title = asString(event.toolName) ?? asString(event.name) ?? "tool";
-  const detail = asString(event.result) ?? asString(event.error);
+  const detail = toolDetail(event);
   return {
     id: asString(event.toolCallId) ?? syntheticId(state, "tool"),
     kind: "tool",
     title,
     status,
     createdAt,
+    ...(event.args === undefined ? {} : { args: event.args }),
     ...(detail ? { detail } : {}),
   };
+}
+
+function messageRole(event: JsonObject): string | undefined {
+  return isObject(event.message) ? asString(event.message.role) : undefined;
+}
+
+function toolStatus(event: JsonObject): "done" | "error" {
+  return event.isError === true ? "error" : "done";
+}
+
+function toolDetail(event: JsonObject): string | undefined {
+  const result = isObject(event.result)
+    ? event.result
+    : isObject(event.partialResult)
+      ? event.partialResult
+      : undefined;
+  const content = textFromToolContent(result?.content);
+  if (content) {
+    return content;
+  }
+
+  const details = detailText(result?.details);
+  return details || asString(event.error);
+}
+
+function textFromToolContent(content: JsonValue | undefined): string | undefined {
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const lines = content.flatMap(entry => {
+    if (!isObject(entry)) {
+      return [];
+    }
+    if (entry.type === "text") {
+      const text = asString(entry.text);
+      return text ? [text] : [];
+    }
+    if (entry.type === "image") {
+      const mimeType = asString(entry.mimeType) ?? "image";
+      return [`[image: ${mimeType}]`];
+    }
+    return [];
+  });
+
+  const text = lines.join("\n");
+  return text.trim() ? text : undefined;
+}
+
+function detailText(details: JsonValue | undefined): string | undefined {
+  if (details === undefined || details === null) {
+    return undefined;
+  }
+  if (isObject(details) && Object.keys(details).length === 0) {
+    return undefined;
+  }
+  if (isObject(details) && typeof details.diff === "string") {
+    return details.diff;
+  }
+  if (typeof details === "string") {
+    return details;
+  }
+  return JSON.stringify(details, null, 2);
 }
 
 function syntheticId(state: TimelineProjectionState, prefix: string): string {
@@ -208,4 +269,8 @@ function isObject(value: unknown): value is JsonObject {
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
 }

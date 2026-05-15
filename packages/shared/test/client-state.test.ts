@@ -89,6 +89,69 @@ describe("mobile client reducer", () => {
     ]);
   });
 
+  it("upserts tool item updates without moving their timeline position", () => {
+    const opened = reduceHostEvent(createMobileClientState(), {
+      type: "session_opened",
+      snapshot,
+    });
+    const withTool = reduceHostEvent(opened, {
+      type: "timeline_item",
+      sessionId: "s1",
+      seq: 1,
+      item: {
+        id: "tool-1",
+        kind: "tool",
+        title: "bash",
+        status: "running",
+        args: { command: "pnpm test" },
+        createdAt: "2026-05-15T00:00:00.000Z",
+      },
+    });
+    const withAssistant = reduceHostEvent(withTool, {
+      type: "timeline_item",
+      sessionId: "s1",
+      seq: 2,
+      item: {
+        id: "assistant-1",
+        kind: "assistant",
+        text: "Done",
+        createdAt: "2026-05-15T00:00:01.000Z",
+      },
+    });
+    const withToolResult = reduceHostEvent(withAssistant, {
+      type: "timeline_item",
+      sessionId: "s1",
+      seq: 3,
+      item: {
+        id: "tool-1",
+        kind: "tool",
+        title: "bash",
+        status: "done",
+        args: { command: "pnpm test" },
+        detail: "passed",
+        createdAt: "2026-05-15T00:00:02.000Z",
+      },
+    });
+
+    expect(withToolResult.sessions.s1?.timeline).toEqual([
+      {
+        id: "tool-1",
+        kind: "tool",
+        title: "bash",
+        status: "done",
+        args: { command: "pnpm test" },
+        detail: "passed",
+        createdAt: "2026-05-15T00:00:02.000Z",
+      },
+      {
+        id: "assistant-1",
+        kind: "assistant",
+        text: "Done",
+        createdAt: "2026-05-15T00:00:01.000Z",
+      },
+    ]);
+  });
+
   it("updates session state without dropping timeline", () => {
     const opened = reduceHostEvent(createMobileClientState(), { type: "session_opened", snapshot });
     const updated = reduceHostEvent(opened, {

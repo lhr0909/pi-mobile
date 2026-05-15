@@ -29,6 +29,37 @@ describe("SdkSessionRunner", () => {
     );
   });
 
+  it("keeps one expanded tool item in snapshots after start and end events", async () => {
+    const factory = new FakeRuntimeFactory();
+    const runner = await SdkSessionRunner.open(factory, { cwd: "/tmp/project" }, () => {});
+
+    factory.created[0]?.emit({
+      type: "tool_execution_start",
+      toolCallId: "tool-1",
+      toolName: "bash",
+      args: { command: "git status --short" },
+    });
+    factory.created[0]?.emit({
+      type: "tool_execution_end",
+      toolCallId: "tool-1",
+      toolName: "bash",
+      args: { command: "git status --short" },
+      result: { content: [{ type: "text", text: " M README.md" }], details: {} },
+      isError: false,
+    });
+
+    expect(runner.snapshot().timeline).toEqual([
+      expect.objectContaining({
+        id: "tool-1",
+        kind: "tool",
+        title: "bash",
+        status: "done",
+        args: { command: "git status --short" },
+        detail: " M README.md",
+      }),
+    ]);
+  });
+
   it("routes extension UI dialog responses back to the waiting SDK context", async () => {
     const factory = new FakeRuntimeFactory();
     const emitted: any[] = [];

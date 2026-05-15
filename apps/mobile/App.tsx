@@ -1,6 +1,7 @@
-import { useMemo, useReducer, useRef } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { FlatList, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
-import type { SessionSnapshot, TimelineItem } from "@pi-mobile/shared";
+import Markdown from "react-native-markdown-display";
+import type { JsonValue, SessionSnapshot, TimelineItem } from "@pi-mobile/shared";
 import { createInitialAppViewState, isAbsoluteHostPath, reduceAppViewState, type AppViewState } from "./src/app-view-model";
 import { HostClient } from "./src/host-client";
 
@@ -269,15 +270,23 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+const WORKING_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const WORKING_SPINNER_INTERVAL_MS = 80;
+
 function WorkingIndicator() {
+  const [frameIndex, setFrameIndex] = useState(0);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setFrameIndex(index => (index + 1) % WORKING_SPINNER_FRAMES.length);
+    }, WORKING_SPINNER_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, []);
+
   return (
     <View style={styles.workingIndicator}>
-      <View style={styles.workingDots}>
-        <View style={styles.workingDot} />
-        <View style={styles.workingDot} />
-        <View style={styles.workingDot} />
-      </View>
-      <Text style={styles.workingText}>Working....</Text>
+      <Text style={styles.workingGlyph}>{WORKING_SPINNER_FRAMES[frameIndex]}</Text>
+      <Text style={styles.workingText}>Working...</Text>
     </View>
   );
 }
@@ -291,9 +300,9 @@ function TimelineRow({ item }: { item: TimelineItem }) {
     return (
       <View style={[styles.toolCard, toolCardStyle(item.status)]}>
         <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
-        <Text style={styles.toolTitle}>{item.title}</Text>
-        <Text style={styles.toolOutput}>Tool {item.status}</Text>
-        {item.detail ? <Text style={styles.toolOutput}>{item.detail}</Text> : null}
+        <Text style={styles.toolTitle}>{toolTitle(item.title, item.status)}</Text>
+        {item.args !== undefined ? <ToolSection label="Input" text={formatToolArgs(item.title, item.args)} /> : null}
+        {item.detail ? <ToolSection label="Output" text={item.detail} /> : null}
       </View>
     );
   }
@@ -302,7 +311,7 @@ function TimelineRow({ item }: { item: TimelineItem }) {
     return (
       <View style={styles.assistantMessage}>
         <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
-        <Text style={styles.messageText}>{item.text}</Text>
+        <MarkdownText text={item.text} />
       </View>
     );
   }
@@ -310,7 +319,7 @@ function TimelineRow({ item }: { item: TimelineItem }) {
   if (item.kind === "thinking") {
     return (
       <View style={styles.thinkingBlock}>
-        <Text style={styles.thinkingText}>{item.text}</Text>
+        <MarkdownText text={item.text} thinking />
       </View>
     );
   }
@@ -318,9 +327,24 @@ function TimelineRow({ item }: { item: TimelineItem }) {
   return (
     <View style={styles.userMessage}>
       <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
-      <Text style={styles.messageText}>{item.text}</Text>
+      <MarkdownText text={item.text} />
     </View>
   );
+}
+
+function ToolSection({ label, text }: { label: string; text: string }) {
+  return (
+    <View style={styles.toolSection}>
+      <Text style={styles.toolSectionLabel}>{label}</Text>
+      <View style={styles.toolCodeBlock}>
+        <Text style={styles.toolCodeText}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
+function MarkdownText({ text, thinking = false }: { text: string; thinking?: boolean }) {
+  return <Markdown style={thinking ? thinkingMarkdownStyles : markdownStyles}>{text}</Markdown>;
 }
 
 interface ComposerProps {
@@ -422,6 +446,34 @@ function shortSessionId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
 
+function toolTitle(title: string, status: "running" | "done" | "error"): string {
+  if (title === "bash") {
+    return status === "running" ? "Running command..." : "Command result";
+  }
+  return `${title} · ${status}`;
+}
+
+function formatToolArgs(title: string, args: JsonValue): string {
+  if (title === "bash" && args && typeof args === "object" && !Array.isArray(args)) {
+    const command = args.command;
+    if (typeof command === "string") {
+      return `$ ${command}`;
+    }
+  }
+  return formatJson(args);
+}
+
+function formatJson(value: JsonValue): string {
+  if (typeof value === "string") {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  return JSON.stringify(value, null, 2);
+}
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -504,8 +556,7 @@ const styles = StyleSheet.create({
   timeline: { flex: 1 },
   timelineContent: { gap: 18, paddingVertical: 18 },
   workingIndicator: { alignItems: "center", flexDirection: "row", gap: 10, paddingHorizontal: 18, paddingVertical: 10 },
-  workingDots: { alignItems: "center", gap: 4 },
-  workingDot: { backgroundColor: palette.accent, borderRadius: 999, height: 3, width: 3 },
+  workingGlyph: { ...monoText, color: palette.accent, fontSize: 16, lineHeight: 24, minWidth: 18 },
   workingText: { ...monoText, color: palette.muted, fontSize: 16, lineHeight: 24 },
   empty: { ...monoText, color: palette.muted, fontSize: 14, padding: 18 },
   timestamp: { ...monoText, color: palette.dim, fontSize: 11, marginBottom: 8 },
@@ -525,6 +576,10 @@ const styles = StyleSheet.create({
   toolError: { backgroundColor: palette.toolError },
   toolTitle: { ...monoText, color: palette.text, fontSize: 15, fontWeight: "800", lineHeight: 24 },
   toolOutput: { ...monoText, color: palette.muted, fontSize: 13, lineHeight: 20, marginTop: 4 },
+  toolSection: { gap: 6, marginTop: 10 },
+  toolSectionLabel: { ...monoText, color: palette.muted, fontSize: 12, fontWeight: "800" },
+  toolCodeBlock: { backgroundColor: palette.bodyBg, borderRadius: 4, padding: 10 },
+  toolCodeText: { ...monoText, color: palette.text, fontSize: 13, lineHeight: 20 },
   composer: { gap: 8, paddingBottom: 10 },
   promptInput: {
     ...monoText,
@@ -551,4 +606,33 @@ const styles = StyleSheet.create({
   disabledButton: { opacity: 0.45 },
   buttonText: { ...monoText, color: palette.text, fontSize: 12, fontWeight: "800" },
   primaryButtonText: { color: palette.bodyBg },
+});
+
+const markdownStyles = StyleSheet.create({
+  body: { ...monoText, fontSize: 15, fontWeight: "700", lineHeight: 24 },
+  paragraph: { marginBottom: 0, marginTop: 0 },
+  heading1: { ...monoText, color: palette.borderAccent, fontSize: 16, fontWeight: "800", lineHeight: 24, marginBottom: 0, marginTop: 12 },
+  heading2: { ...monoText, color: palette.borderAccent, fontSize: 15, fontWeight: "800", lineHeight: 24, marginBottom: 0, marginTop: 12 },
+  heading3: { ...monoText, color: palette.borderAccent, fontSize: 15, fontWeight: "800", lineHeight: 24, marginBottom: 0, marginTop: 12 },
+  bullet_list: { marginBottom: 0, marginTop: 8 },
+  ordered_list: { marginBottom: 0, marginTop: 8 },
+  list_item: { marginBottom: 0 },
+  bullet_list_icon: { color: palette.warning },
+  ordered_list_icon: { color: palette.warning },
+  code_inline: { ...monoText, backgroundColor: palette.containerBg, color: palette.warning, fontSize: 14 },
+  code_block: { ...monoText, backgroundColor: palette.containerBg, borderColor: palette.dim, borderWidth: 1, color: palette.text, fontSize: 13, lineHeight: 20, padding: 10 },
+  fence: { ...monoText, backgroundColor: palette.containerBg, borderColor: palette.dim, borderWidth: 1, color: palette.text, fontSize: 13, lineHeight: 20, padding: 10 },
+  blockquote: { borderLeftColor: palette.customLabel, borderLeftWidth: 3, marginBottom: 0, marginTop: 8, paddingLeft: 10 },
+  link: { color: palette.borderAccent, textDecorationLine: "underline" },
+  strong: { fontWeight: "800" },
+  em: { fontStyle: "italic" },
+});
+
+const thinkingMarkdownStyles = StyleSheet.create({
+  ...markdownStyles,
+  body: { ...monoText, color: palette.muted, fontSize: 15, fontStyle: "italic", lineHeight: 24 },
+  text: { color: palette.muted, fontStyle: "italic" },
+  code_inline: { ...monoText, backgroundColor: palette.containerBg, color: palette.muted, fontSize: 14, fontStyle: "italic" },
+  fence: { ...monoText, backgroundColor: palette.containerBg, borderColor: palette.dim, borderWidth: 1, color: palette.muted, fontSize: 13, fontStyle: "italic", lineHeight: 20, padding: 10 },
+  code_block: { ...monoText, backgroundColor: palette.containerBg, borderColor: palette.dim, borderWidth: 1, color: palette.muted, fontSize: 13, fontStyle: "italic", lineHeight: 20, padding: 10 },
 });

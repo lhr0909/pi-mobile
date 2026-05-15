@@ -59,6 +59,7 @@ export interface ToolItem {
   kind: "tool";
   title: string;
   status: "running" | "done" | "error";
+  args?: JsonValue;
   detail?: string;
   createdAt: string;
 }
