@@ -17,10 +17,12 @@ describe("SdkSessionRunner", () => {
     });
 
     expect(runner.snapshot().timeline).toEqual([
+      expect.objectContaining({ kind: "user", text: "hello" }),
       expect.objectContaining({ id: "assistant-1", kind: "assistant", text: "Hi" }),
     ]);
     expect(emitted).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ type: "timeline_item", item: expect.objectContaining({ kind: "user", text: "hello" }) }),
         expect.objectContaining({ type: "raw_event", sessionId: runner.id }),
         expect.objectContaining({ type: "timeline_delta", delta: "Hi" }),
       ]),

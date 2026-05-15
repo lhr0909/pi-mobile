@@ -69,6 +69,15 @@ describe("app view model", () => {
     expect(withSession.client.activeSessionId).toBe("s1");
   });
 
+  it("toggles session header collapse state", () => {
+    const collapsed = reduceAppViewState(createInitialAppViewState("http://localhost:4739"), {
+      type: "toggleSessionHeader",
+    });
+
+    expect(collapsed.sessionHeaderCollapsed).toBe(true);
+    expect(reduceAppViewState(collapsed, { type: "toggleSessionHeader" }).sessionHeaderCollapsed).toBe(false);
+  });
+
   it("clears prompt after send", () => {
     const state = reduceAppViewState(createInitialAppViewState("http://localhost:4739"), {
       type: "setPrompt",

@@ -88,6 +88,7 @@ export default function App() {
           snapshot={activeSession}
           state={state}
           onShowConnection={() => dispatch({ type: "showConnection" })}
+          onToggleHeader={() => dispatch({ type: "toggleSessionHeader" })}
           onSendPrompt={sendPrompt}
           onSteer={steer}
           onFollowUp={followUp}
@@ -188,6 +189,7 @@ interface SessionScreenProps {
   snapshot: SessionSnapshot;
   state: AppViewState;
   onShowConnection: () => void;
+  onToggleHeader: () => void;
   onSendPrompt: () => void;
   onSteer: () => void;
   onFollowUp: () => void;
@@ -199,6 +201,7 @@ function SessionScreen({
   snapshot,
   state,
   onShowConnection,
+  onToggleHeader,
   onSendPrompt,
   onSteer,
   onFollowUp,
@@ -210,14 +213,28 @@ function SessionScreen({
       <View style={styles.sessionHeader}>
         <View style={styles.headerTopRow}>
           <Text style={styles.sessionTitle}>Session: {shortSessionId(snapshot.session.id)}</Text>
-          <PiButton accessibilityLabel="Connection" label="Host" onPress={onShowConnection} variant="ghost" />
+          <View style={styles.headerActions}>
+            <PiButton
+              accessibilityLabel="Toggle Session Header"
+              label={state.sessionHeaderCollapsed ? "Show" : "Hide"}
+              onPress={onToggleHeader}
+              variant="ghost"
+            />
+            <PiButton accessibilityLabel="Connection" label="Host" onPress={onShowConnection} variant="ghost" />
+          </View>
         </View>
-        <Text style={styles.helpText}>T toggle thinking · O toggle tools</Text>
-        <InfoRow label="Path" value={snapshot.session.cwd} />
-        <InfoRow label="State" value={snapshot.session.runState} />
-        <InfoRow label="Messages" value={String(snapshot.session.messageCount)} />
-        {snapshot.session.thinkingLevel ? <InfoRow label="Thinking" value={snapshot.session.thinkingLevel} /> : null}
-        {snapshot.session.model ? <InfoRow label="Model" value={formatModel(snapshot.session.model)} /> : null}
+        {state.sessionHeaderCollapsed ? (
+          <Text numberOfLines={1} style={styles.collapsedHeaderSummary}>{snapshot.session.cwd}</Text>
+        ) : (
+          <>
+            <Text style={styles.helpText}>T toggle thinking · O toggle tools</Text>
+            <InfoRow label="Path" value={snapshot.session.cwd} />
+            <InfoRow label="State" value={snapshot.session.runState} />
+            <InfoRow label="Messages" value={String(snapshot.session.messageCount)} />
+            {snapshot.session.thinkingLevel ? <InfoRow label="Thinking" value={snapshot.session.thinkingLevel} /> : null}
+            {snapshot.session.model ? <InfoRow label="Model" value={formatModel(snapshot.session.model)} /> : null}
+          </>
+        )}
       </View>
 
       <FlatList
@@ -452,7 +469,9 @@ const styles = StyleSheet.create({
   sessionScreen: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
   sessionHeader: { backgroundColor: palette.containerBg, borderRadius: 4, gap: 6, padding: 18 },
   headerTopRow: { alignItems: "center", flexDirection: "row", gap: 12, justifyContent: "space-between" },
+  headerActions: { flexDirection: "row", gap: 8 },
   sessionTitle: { ...monoText, color: palette.borderAccent, flex: 1, fontSize: 18, fontWeight: "800" },
+  collapsedHeaderSummary: { ...monoText, color: palette.dim, fontSize: 12, lineHeight: 18 },
   infoRow: { alignItems: "baseline", flexDirection: "row", gap: 8 },
   infoLabel: { ...monoText, color: palette.dim, fontSize: 12, fontWeight: "800", minWidth: 74 },
   infoValue: { ...monoText, color: palette.text, flex: 1, fontSize: 12, lineHeight: 18 },

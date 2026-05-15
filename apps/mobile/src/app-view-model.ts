@@ -15,6 +15,7 @@ export interface AppViewState {
   token: string;
   cwd: string;
   prompt: string;
+  sessionHeaderCollapsed: boolean;
   connectionState: "disconnected" | "connecting" | "connected";
   hostStatus?: HostStatus;
   errorMessage?: string;
@@ -26,6 +27,7 @@ export type AppAction =
   | { type: "setCwd"; value: string }
   | { type: "setPrompt"; value: string }
   | { type: "showConnection" }
+  | { type: "toggleSessionHeader" }
   | { type: "connecting" }
   | { type: "connected"; status: HostStatus }
   | { type: "disconnected"; errorMessage?: string }
@@ -40,6 +42,7 @@ export function createInitialAppViewState(defaultHostUrl: string): AppViewState 
     token: "",
     cwd: "",
     prompt: "",
+    sessionHeaderCollapsed: false,
     connectionState: "disconnected",
   };
 }
@@ -56,6 +59,8 @@ export function reduceAppViewState(state: AppViewState, action: AppAction): AppV
       return { ...state, prompt: action.value };
     case "showConnection":
       return { ...state, screen: "connection" };
+    case "toggleSessionHeader":
+      return { ...state, sessionHeaderCollapsed: !state.sessionHeaderCollapsed };
     case "connecting":
       return withoutError({ ...state, connectionState: "connecting" });
     case "connected":

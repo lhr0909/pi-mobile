@@ -65,6 +65,7 @@ export class SdkSessionRunner implements SessionRunner {
 
   async prompt(message: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
     let accepted = false;
+    let recordedPrompt = false;
     await new Promise<void>((resolve, reject) => {
       void this.session
         .prompt(message, {
@@ -73,6 +74,10 @@ export class SdkSessionRunner implements SessionRunner {
           preflightResult: (success: boolean) => {
             if (success) {
               accepted = true;
+              if (!recordedPrompt) {
+                recordedPrompt = true;
+                this.recordUserMessage(message);
+              }
               resolve();
             } else {
               reject(new Error("Prompt was rejected before execution"));
@@ -161,6 +166,23 @@ export class SdkSessionRunner implements SessionRunner {
         item.text += event.delta;
       }
     }
+  }
+
+  private recordUserMessage(message: string): void {
+    const createdAt = new Date().toISOString();
+    const event = this.eventLog.record(seq => ({
+      type: "timeline_item",
+      sessionId: this.id,
+      item: {
+        id: `user-${seq}`,
+        kind: "user",
+        text: message,
+        createdAt,
+      },
+      seq,
+    }));
+    this.applyTimelineEvent(event);
+    this.emit(event);
   }
 
   private recordCommandError(command: string, message: string): void {
