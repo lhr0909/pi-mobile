@@ -33,11 +33,9 @@ export function projectPiEvent(
   const createdAt = (input.now ?? new Date()).toISOString();
   switch (eventType) {
     case "agent_start":
-      resetActiveMessageItems(state);
-      return [timelineItem(input, statusItem(state, "Agent started", "info", createdAt))];
     case "agent_end":
       resetActiveMessageItems(state);
-      return [timelineItem(input, statusItem(state, "Agent finished", "success", createdAt))];
+      return [];
     case "message_update":
       return projectMessageUpdate(state, input, input.event, createdAt);
     case "tool_execution_start":

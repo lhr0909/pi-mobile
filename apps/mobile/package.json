@@ -6,6 +6,9 @@
   "scripts": {
     "start": "expo start --ios",
     "start:metro": "expo start",
+    "web:export": "expo export --platform web",
+    "web:serve": "expo serve --port 8082",
+    "web:test": "pnpm web:export && pnpm web:serve",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --dir .",
     "test:coverage": "vitest run --dir . --coverage"

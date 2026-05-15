@@ -82,30 +82,11 @@ describe("timeline projection", () => {
     ]);
   });
 
-  it("emits status items around agent lifecycle", () => {
+  it("does not emit timeline status prompts for agent lifecycle", () => {
     const state = createTimelineProjectionState();
 
-    const events = projectPiEvent(state, {
-      sessionId: "s1",
-      seq: 5,
-      now: new Date("2026-05-15T00:00:05.000Z"),
-      event: { type: "agent_start" },
-    });
-
-    expect(events).toEqual([
-      {
-        type: "timeline_item",
-        sessionId: "s1",
-        seq: 5,
-        item: {
-          id: "status-1",
-          kind: "status",
-          text: "Agent started",
-          tone: "info",
-          createdAt: "2026-05-15T00:00:05.000Z",
-        },
-      },
-    ]);
+    expect(projectPiEvent(state, { sessionId: "s1", seq: 5, event: { type: "agent_start" } })).toEqual([]);
+    expect(projectPiEvent(state, { sessionId: "s1", seq: 6, event: { type: "agent_end" } })).toEqual([]);
   });
 });
 

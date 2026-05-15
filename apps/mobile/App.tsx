@@ -245,6 +245,8 @@ function SessionScreen({
         style={styles.timeline}
       />
 
+      {isWorking(snapshot.session.runState) ? <WorkingIndicator /> : null}
+
       <Composer
         cwd={snapshot.session.cwd}
         onAbort={onAbort}
@@ -263,6 +265,19 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}:</Text>
       <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  );
+}
+
+function WorkingIndicator() {
+  return (
+    <View style={styles.workingIndicator}>
+      <View style={styles.workingDots}>
+        <View style={styles.workingDot} />
+        <View style={styles.workingDot} />
+        <View style={styles.workingDot} />
+      </View>
+      <Text style={styles.workingText}>Working....</Text>
     </View>
   );
 }
@@ -399,6 +414,10 @@ function statusToneStyle(tone: "info" | "success" | "warning" | "error") {
   }
 }
 
+function isWorking(runState: SessionSnapshot["session"]["runState"]): boolean {
+  return runState === "streaming" || runState === "compacting";
+}
+
 function shortSessionId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
@@ -484,6 +503,10 @@ const styles = StyleSheet.create({
   infoValue: { ...monoText, color: palette.text, flex: 1, fontSize: 12, lineHeight: 18 },
   timeline: { flex: 1 },
   timelineContent: { gap: 18, paddingVertical: 18 },
+  workingIndicator: { alignItems: "center", flexDirection: "row", gap: 10, paddingHorizontal: 18, paddingVertical: 10 },
+  workingDots: { alignItems: "center", gap: 4 },
+  workingDot: { backgroundColor: palette.accent, borderRadius: 999, height: 3, width: 3 },
+  workingText: { ...monoText, color: palette.muted, fontSize: 16, lineHeight: 24 },
   empty: { ...monoText, color: palette.muted, fontSize: 14, padding: 18 },
   timestamp: { ...monoText, color: palette.dim, fontSize: 11, marginBottom: 8 },
   statusItem: { ...monoText, fontSize: 12, lineHeight: 18, paddingHorizontal: 18 },

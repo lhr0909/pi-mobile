@@ -29,6 +29,7 @@ The implementation follows the research decision: **SDK-hosted TypeScript daemon
 - Opens a new Pi session for that workspace path, then switches into the session view.
 - Shows live status, tool, thinking, user, and assistant timeline items with a dark monospaced style based on Pi's session export/TUI palette.
 - Records accepted mobile prompts as user timeline cards so the submitted message appears before assistant output.
+- Shows a compact `Working....` indicator while Pi is streaming/compacting instead of adding `Agent started` / `Agent finished` timeline prompts.
 - Includes a collapsible session header for reducing metadata height during active chat.
 - Sends prompt, steer, follow-up, and abort commands from a TUI-like composer.
 
@@ -86,7 +87,7 @@ If `PI_MOBILE_HOST_TOKEN` is set, HTTP clients must send `Authorization: Bearer 
 For local Expo Web smoke tests, opt into browser CORS explicitly:
 
 ```bash
-PI_MOBILE_HOST_CORS_ORIGIN=http://127.0.0.1:8082 pnpm dev:host
+pnpm dev:host:web
 ```
 
 ## Run the mobile app
@@ -105,12 +106,16 @@ Flow:
 4. Tap **Open new session** to create a Pi session and move into the session view.
 5. Use the bottom composer to send prompts, steer/follow up, or abort the active turn.
 
-When simulator tapping is unreliable, use Expo Web for browser-based mobile viewport smoke tests:
+When simulator tapping is unreliable, use Expo Web for browser-based mobile viewport smoke tests. Start these in separate terminals:
 
 ```bash
-pnpm --filter @pi-mobile/app exec expo export --platform web --output-dir /tmp/pi-mobile-web-export
-PI_MOBILE_HOST_CORS_ORIGIN=http://127.0.0.1:8082 pnpm dev:host
-cd /tmp/pi-mobile-web-export && python3 -m http.server 8082 --bind 127.0.0.1
+pnpm dev:host:web
+pnpm web:test
+```
+
+Then open `http://127.0.0.1:8082`, or drive it with `agent-browser`:
+
+```bash
 agent-browser --session pi-mobile-web batch "set device \"iPhone 14\"" "open http://127.0.0.1:8082" "snapshot -i"
 ```
 
