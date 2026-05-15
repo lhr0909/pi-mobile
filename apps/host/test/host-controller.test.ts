@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { HostController } from "../src/host-controller.js";
 import { FakeRuntimeFactory } from "./fakes.js";
@@ -19,6 +20,21 @@ describe("HostController", () => {
     expect(factory.created[0]?.steers).toEqual(["change course"]);
     expect(factory.created[0]?.followUps).toEqual(["then test"]);
     expect(factory.created[0]?.abortCount).toBe(1);
+  });
+
+  it("normalizes relative session paths before using the runtime", async () => {
+    const factory = new FakeRuntimeFactory();
+    const controller = new HostController(factory);
+
+    await controller.listSessions("relative/project");
+    const snapshot = await controller.openSession({ cwd: "relative/project", sessionFile: "sessions/test.jsonl" });
+
+    expect(factory.listedCwds[0]).toBe(path.resolve("relative/project"));
+    expect(factory.runtimeRequests[0]).toEqual({
+      cwd: path.resolve("relative/project"),
+      sessionFile: path.resolve("sessions/test.jsonl"),
+    });
+    expect(snapshot.session.cwd).toBe(path.resolve("relative/project"));
   });
 
   it("replays runner events by sequence", async () => {

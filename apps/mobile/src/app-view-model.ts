@@ -1,12 +1,22 @@
-import { createMobileClientState, reduceHostEvent, type HostEvent, type MobileClientState } from "@pi-mobile/shared";
+import {
+  createMobileClientState,
+  reduceHostEvent,
+  type HostEvent,
+  type HostStatus,
+  type MobileClientState,
+} from "@pi-mobile/shared";
+
+export type AppScreen = "connection" | "session";
 
 export interface AppViewState {
   client: MobileClientState;
+  screen: AppScreen;
   hostUrl: string;
   token: string;
   cwd: string;
   prompt: string;
   connectionState: "disconnected" | "connecting" | "connected";
+  hostStatus?: HostStatus;
   errorMessage?: string;
 }
 
@@ -15,8 +25,9 @@ export type AppAction =
   | { type: "setToken"; value: string }
   | { type: "setCwd"; value: string }
   | { type: "setPrompt"; value: string }
+  | { type: "showConnection" }
   | { type: "connecting" }
-  | { type: "connected" }
+  | { type: "connected"; status: HostStatus }
   | { type: "disconnected"; errorMessage?: string }
   | { type: "hostEvent"; event: HostEvent }
   | { type: "clearPrompt" };
@@ -24,9 +35,10 @@ export type AppAction =
 export function createInitialAppViewState(defaultHostUrl: string): AppViewState {
   return {
     client: createMobileClientState(),
+    screen: "connection",
     hostUrl: defaultHostUrl,
     token: "",
-    cwd: ".",
+    cwd: "",
     prompt: "",
     connectionState: "disconnected",
   };
@@ -42,21 +54,45 @@ export function reduceAppViewState(state: AppViewState, action: AppAction): AppV
       return { ...state, cwd: action.value };
     case "setPrompt":
       return { ...state, prompt: action.value };
+    case "showConnection":
+      return { ...state, screen: "connection" };
     case "connecting":
       return withoutError({ ...state, connectionState: "connecting" });
     case "connected":
-      return withoutError({ ...state, connectionState: "connected" });
+      return withoutError({
+        ...state,
+        client: reduceHostEvent(state.client, { type: "host_status", status: action.status }),
+        connectionState: "connected",
+        hostStatus: action.status,
+        cwd: nextWorkspacePath(state.cwd, action.status.cwd),
+      });
     case "disconnected":
       return {
         ...state,
         connectionState: "disconnected",
+        screen: "connection",
         ...(action.errorMessage ? { errorMessage: action.errorMessage } : {}),
       };
-    case "hostEvent":
-      return withoutError({ ...state, client: reduceHostEvent(state.client, action.event) });
+    case "hostEvent": {
+      const client = reduceHostEvent(state.client, action.event);
+      return withoutError({
+        ...state,
+        client,
+        screen: action.event.type === "session_opened" ? "session" : state.screen,
+      });
+    }
     case "clearPrompt":
       return { ...state, prompt: "" };
   }
+}
+
+export function isAbsoluteHostPath(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith("/") || /^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith("\\\\");
+}
+
+function nextWorkspacePath(currentPath: string, hostCwd: string): string {
+  return isAbsoluteHostPath(currentPath) ? currentPath : hostCwd;
 }
 
 function withoutError(state: AppViewState): AppViewState {

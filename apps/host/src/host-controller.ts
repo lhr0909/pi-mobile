@@ -1,4 +1,5 @@
 import os from "node:os";
+import path from "node:path";
 import type {
   ExtensionUiResponse,
   HostEvent,
@@ -36,7 +37,7 @@ export class HostController {
 
   async listSessions(cwd?: string): Promise<SessionSummary[]> {
     const active = new Map([...this.runners.values()].map(runner => [runner.state.sessionFile, runner.state]));
-    const stored = await this.runtimeFactory.listSessions(cwd);
+    const stored = await this.runtimeFactory.listSessions(cwd ? path.resolve(cwd) : undefined);
     return stored.map(summary => {
       const activeState = active.get(summary.sessionFile);
       return activeState ?? summary;
@@ -44,7 +45,7 @@ export class HostController {
   }
 
   async openSession(request: OpenSessionRequest): Promise<SessionSnapshot> {
-    const runner = await SdkSessionRunner.open(this.runtimeFactory, request, event => this.emit(event));
+    const runner = await SdkSessionRunner.open(this.runtimeFactory, normalizeOpenSessionRequest(request), event => this.emit(event));
     this.runners.set(runner.id, runner);
     const snapshot = runner.snapshot();
     this.emit({ type: "session_opened", snapshot });
@@ -97,4 +98,12 @@ export class HostController {
       listener(event);
     }
   }
+}
+
+function normalizeOpenSessionRequest(request: OpenSessionRequest): OpenSessionRequest {
+  return {
+    ...request,
+    cwd: path.resolve(request.cwd),
+    ...(request.sessionFile ? { sessionFile: path.resolve(request.sessionFile) } : {}),
+  };
 }

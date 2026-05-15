@@ -4,10 +4,10 @@ import { HostController } from "../src/host-controller.js";
 import { MobileHostServer } from "../src/server/mobile-host-server.js";
 import { FakeRuntimeFactory } from "./fakes.js";
 
-async function startServer(token?: string) {
+async function startServer(options: { token?: string; corsOrigin?: string } = {}) {
   const factory = new FakeRuntimeFactory();
   const controller = new HostController(factory);
-  const server = new MobileHostServer(controller, token ? { token } : {});
+  const server = new MobileHostServer(controller, options);
   await server.listen(0, "127.0.0.1");
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   return { baseUrl, controller, factory, server };
@@ -37,7 +37,7 @@ describe("MobileHostServer", () => {
   });
 
   it("requires bearer auth when a token is configured", async () => {
-    const { baseUrl, server } = await startServer("secret");
+    const { baseUrl, server } = await startServer({ token: "secret" });
     try {
       const denied = await fetch(`${baseUrl}/api/host/status`);
       expect(denied.status).toBe(401);
@@ -46,6 +46,22 @@ describe("MobileHostServer", () => {
         headers: { authorization: "Bearer secret" },
       });
       expect(allowed.status).toBe(200);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("handles CORS preflight when a CORS origin is configured", async () => {
+    const { baseUrl, server } = await startServer({ corsOrigin: "http://localhost:8081" });
+    try {
+      const response = await fetch(`${baseUrl}/api/sessions`, {
+        method: "OPTIONS",
+        headers: { origin: "http://localhost:8081", "access-control-request-method": "POST" },
+      });
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:8081");
+      expect(response.headers.get("access-control-allow-headers")).toContain("authorization");
     } finally {
       await server.close();
     }

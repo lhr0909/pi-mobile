@@ -13,6 +13,7 @@ import type { HostController } from "../host-controller.js";
 
 export interface MobileHostServerOptions {
   token?: string;
+  corsOrigin?: string;
 }
 
 export class MobileHostServer {
@@ -68,6 +69,13 @@ export class MobileHostServer {
   private async handleHttp(request: IncomingMessage, response: ServerResponse): Promise<void> {
     try {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+      applyCorsHeaders(response, this.options.corsOrigin);
+      if (request.method === "OPTIONS") {
+        response.statusCode = 204;
+        response.end();
+        return;
+      }
+
       if (request.method === "GET" && url.pathname === "/api/health") {
         writeJson(response, 200, { ok: true });
         return;
@@ -190,6 +198,17 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
   const text = Buffer.concat(chunks).toString("utf8");
   return text.trim() ? JSON.parse(text) : {};
+}
+
+function applyCorsHeaders(response: ServerResponse, corsOrigin?: string): void {
+  if (!corsOrigin) {
+    return;
+  }
+
+  response.setHeader("access-control-allow-origin", corsOrigin);
+  response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+  response.setHeader("access-control-allow-headers", "authorization,content-type");
+  response.setHeader("access-control-max-age", "86400");
 }
 
 function writeJson<T>(response: ServerResponse, status: number, body: T): void {

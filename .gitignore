@@ -6,6 +6,7 @@ web-build/
 .DS_Store
 *.log
 *.tsbuildinfo
+pi-session-*.html
 .env
 .env.*
 !.env.example

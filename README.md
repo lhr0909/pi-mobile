@@ -18,16 +18,17 @@ The implementation follows the research decision: **SDK-hosted TypeScript daemon
 - Projects raw Pi SDK events into mobile timeline updates.
 - Exposes HTTP APIs for host status, session list/open/snapshot/events, prompt, steer, follow-up, abort, and extension UI responses.
 - Broadcasts live host/session events over WebSocket at `/ws`.
-- Supports optional bearer-token auth through `PI_MOBILE_HOST_TOKEN`.
+- Supports optional bearer-token auth through `PI_MOBILE_HOST_TOKEN` and explicit dev CORS through `PI_MOBILE_HOST_CORS_ORIGIN`.
 
 ### Mobile app
 
 - Expo / React Native + TypeScript.
-- iPhone-first single-screen MVP.
+- iPhone-first MVP with separate connection and session screens.
 - Connects to a configured host URL and optional token.
-- Opens a new Pi session for a workspace cwd.
-- Shows live status, tool, and assistant transcript timeline items.
-- Sends prompt, steer, follow-up, and abort commands.
+- Seeds the session path from the host's absolute cwd after connect; the connection screen expects an absolute workspace path before opening a new session.
+- Opens a new Pi session for that workspace path, then switches into the session view.
+- Shows live status, tool, user, and assistant timeline items with a dark monospaced style based on Pi's session export/TUI palette.
+- Sends prompt, steer, follow-up, and abort commands from a TUI-like composer.
 
 ## Repository layout
 
@@ -80,6 +81,12 @@ pnpm dev:host
 
 If `PI_MOBILE_HOST_TOKEN` is set, HTTP clients must send `Authorization: Bearer <token>` and WebSocket clients may connect with `/ws?token=<token>`.
 
+For local Expo Web smoke tests, opt into browser CORS explicitly:
+
+```bash
+PI_MOBILE_HOST_CORS_ORIGIN=http://127.0.0.1:8082 pnpm dev:host
+```
+
 ## Run the mobile app
 
 ```bash
@@ -87,6 +94,25 @@ pnpm dev:app
 ```
 
 The app defaults to `http://127.0.0.1:4739`, which works for an iOS simulator talking to a host daemon running on the same Mac. For a physical phone, use a LAN/Tailscale-reachable host URL and set `PI_MOBILE_HOST_BIND=0.0.0.0` on the host.
+
+Flow:
+
+1. Open the connection screen.
+2. Enter the host URL and optional token.
+3. Tap **Connect host**. The app reads `/api/host/status` and fills the session path with the host's absolute cwd unless you already entered an absolute path.
+4. Tap **Open new session** to create a Pi session and move into the session view.
+5. Use the bottom composer to send prompts, steer/follow up, or abort the active turn.
+
+When simulator tapping is unreliable, use Expo Web for browser-based mobile viewport smoke tests:
+
+```bash
+pnpm --filter @pi-mobile/app exec expo export --platform web --output-dir /tmp/pi-mobile-web-export
+PI_MOBILE_HOST_CORS_ORIGIN=http://127.0.0.1:8082 pnpm dev:host
+cd /tmp/pi-mobile-web-export && python3 -m http.server 8082 --bind 127.0.0.1
+agent-browser --session pi-mobile-web batch "set device \"iPhone 14\"" "open http://127.0.0.1:8082" "snapshot -i"
+```
+
+Expo Web is a fast UI/protocol smoke test; keep the iOS simulator or a dev-client/device run for native-specific behavior.
 
 ## Host API sketch
 
