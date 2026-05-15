@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Pi Mobile",
+    "slug": "pi-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "pimobile",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "works.earendil.pi.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "works.earendil.pi.mobile"
+    },
+    "extra": {
+      "defaultHostUrl": "http://127.0.0.1:4739"
+    }
+  }
+}
