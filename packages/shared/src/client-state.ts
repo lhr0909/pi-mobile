@@ -89,7 +89,7 @@ function upsertTimelineItem(timeline: TimelineItem[], item: TimelineItem): Timel
 
 function appendTimelineDelta(timeline: TimelineItem[], itemId: string, delta: string): TimelineItem[] {
   return timeline.map(item => {
-    if (item.id !== itemId || item.kind !== "assistant") {
+    if (item.id !== itemId || (item.kind !== "assistant" && item.kind !== "thinking")) {
       return item;
     }
 

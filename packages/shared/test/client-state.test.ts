@@ -54,6 +54,41 @@ describe("mobile client reducer", () => {
     ]);
   });
 
+  it("applies thinking deltas to thinking timeline items", () => {
+    const opened = reduceHostEvent(createMobileClientState(), {
+      type: "session_opened",
+      snapshot,
+    });
+    const withItem = reduceHostEvent(opened, {
+      type: "timeline_item",
+      sessionId: "s1",
+      seq: 1,
+      item: {
+        id: "thinking-1",
+        kind: "thinking",
+        text: "",
+        createdAt: "2026-05-15T00:00:00.000Z",
+      },
+    });
+
+    const withDelta = reduceHostEvent(withItem, {
+      type: "timeline_delta",
+      sessionId: "s1",
+      seq: 2,
+      itemId: "thinking-1",
+      delta: "Thinking out loud",
+    });
+
+    expect(withDelta.sessions.s1?.timeline).toEqual([
+      {
+        id: "thinking-1",
+        kind: "thinking",
+        text: "Thinking out loud",
+        createdAt: "2026-05-15T00:00:00.000Z",
+      },
+    ]);
+  });
+
   it("updates session state without dropping timeline", () => {
     const opened = reduceHostEvent(createMobileClientState(), { type: "session_opened", snapshot });
     const updated = reduceHostEvent(opened, {

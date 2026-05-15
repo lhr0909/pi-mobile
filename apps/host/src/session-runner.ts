@@ -162,7 +162,7 @@ export class SdkSessionRunner implements SessionRunner {
 
     if (event.type === "timeline_delta") {
       const item = this.timeline.find(candidate => candidate.id === event.itemId);
-      if (item?.kind === "assistant") {
+      if (item?.kind === "assistant" || item?.kind === "thinking") {
         item.text += event.delta;
       }
     }

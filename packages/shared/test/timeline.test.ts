@@ -53,6 +53,35 @@ describe("timeline projection", () => {
     ]);
   });
 
+  it("turns thinking deltas into italic thinking timeline items", () => {
+    const state = createTimelineProjectionState();
+
+    const events = projectPiEvent(state, {
+      sessionId: "s1",
+      seq: 3,
+      now: new Date("2026-05-15T00:00:03.000Z"),
+      event: {
+        type: "message_update",
+        assistantMessageEvent: { type: "thinking_delta", delta: "Considering options" },
+      },
+    });
+
+    expect(events).toEqual([
+      {
+        type: "timeline_item",
+        sessionId: "s1",
+        seq: 3,
+        item: {
+          id: "thinking-1",
+          kind: "thinking",
+          text: "",
+          createdAt: "2026-05-15T00:00:03.000Z",
+        },
+      },
+      { type: "timeline_delta", sessionId: "s1", seq: 3, itemId: "thinking-1", delta: "Considering options" },
+    ]);
+  });
+
   it("emits status items around agent lifecycle", () => {
     const state = createTimelineProjectionState();
 

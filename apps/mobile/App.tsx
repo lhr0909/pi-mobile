@@ -227,7 +227,6 @@ function SessionScreen({
           <Text numberOfLines={1} style={styles.collapsedHeaderSummary}>{snapshot.session.cwd}</Text>
         ) : (
           <>
-            <Text style={styles.helpText}>T toggle thinking · O toggle tools</Text>
             <InfoRow label="Path" value={snapshot.session.cwd} />
             <InfoRow label="State" value={snapshot.session.runState} />
             <InfoRow label="Messages" value={String(snapshot.session.messageCount)} />
@@ -289,6 +288,14 @@ function TimelineRow({ item }: { item: TimelineItem }) {
       <View style={styles.assistantMessage}>
         <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
         <Text style={styles.messageText}>{item.text}</Text>
+      </View>
+    );
+  }
+
+  if (item.kind === "thinking") {
+    return (
+      <View style={styles.thinkingBlock}>
+        <Text style={styles.thinkingText}>{item.text}</Text>
       </View>
     );
   }
@@ -486,6 +493,8 @@ const styles = StyleSheet.create({
   statusError: { color: palette.error },
   userMessage: { backgroundColor: palette.userBg, borderRadius: 4, padding: 18 },
   assistantMessage: { paddingHorizontal: 18 },
+  thinkingBlock: { padding: 18 },
+  thinkingText: { ...monoText, color: palette.muted, fontSize: 15, fontStyle: "italic", lineHeight: 24 },
   messageText: { ...monoText, fontSize: 15, fontWeight: "700", lineHeight: 24 },
   toolCard: { borderRadius: 4, padding: 18 },
   toolPending: { backgroundColor: palette.toolPending },

@@ -47,6 +47,13 @@ export interface TranscriptItem {
   createdAt: string;
 }
 
+export interface ThinkingItem {
+  id: string;
+  kind: "thinking";
+  text: string;
+  createdAt: string;
+}
+
 export interface ToolItem {
   id: string;
   kind: "tool";
@@ -64,7 +71,7 @@ export interface StatusItem {
   createdAt: string;
 }
 
-export type TimelineItem = TranscriptItem | ToolItem | StatusItem;
+export type TimelineItem = TranscriptItem | ThinkingItem | ToolItem | StatusItem;
 
 export interface SessionSnapshot {
   session: SessionState;

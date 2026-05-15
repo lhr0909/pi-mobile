@@ -2,6 +2,7 @@ import type { HostEvent, JsonObject, JsonValue, SessionState, TimelineItem } fro
 
 export interface TimelineProjectionState {
   activeAssistantItemId?: string;
+  activeThinkingItemId?: string;
   nextSyntheticId: number;
 }
 
@@ -32,10 +33,10 @@ export function projectPiEvent(
   const createdAt = (input.now ?? new Date()).toISOString();
   switch (eventType) {
     case "agent_start":
-      delete state.activeAssistantItemId;
+      resetActiveMessageItems(state);
       return [timelineItem(input, statusItem(state, "Agent started", "info", createdAt))];
     case "agent_end":
-      delete state.activeAssistantItemId;
+      resetActiveMessageItems(state);
       return [timelineItem(input, statusItem(state, "Agent finished", "success", createdAt))];
     case "message_update":
       return projectMessageUpdate(state, input, input.event, createdAt);
@@ -87,23 +88,73 @@ function projectMessageUpdate(
   const assistantMessageEvent = isObject(event.assistantMessageEvent)
     ? event.assistantMessageEvent
     : undefined;
+  const eventType = asString(assistantMessageEvent?.type);
   const delta = asString(assistantMessageEvent?.delta);
-  if (!delta) {
+  if (!eventType || !delta) {
     return [];
   }
 
-  if (!state.activeAssistantItemId) {
-    state.activeAssistantItemId = syntheticId(state, "assistant");
-    const item: TimelineItem = {
-      id: state.activeAssistantItemId,
-      kind: "assistant",
-      text: "",
+  if (eventType === "thinking_delta") {
+    return projectStreamingText(state, input, {
+      activeItemId: state.activeThinkingItemId,
+      assignActiveItemId: itemId => {
+        state.activeThinkingItemId = itemId;
+      },
       createdAt,
-    };
-    return [timelineItem(input, item), timelineDelta(input, item.id, delta)];
+      delta,
+      kind: "thinking",
+      prefix: "thinking",
+    });
   }
 
-  return [timelineDelta(input, state.activeAssistantItemId, delta)];
+  if (eventType === "text_delta") {
+    return projectStreamingText(state, input, {
+      activeItemId: state.activeAssistantItemId,
+      assignActiveItemId: itemId => {
+        state.activeAssistantItemId = itemId;
+      },
+      createdAt,
+      delta,
+      kind: "assistant",
+      prefix: "assistant",
+    });
+  }
+
+  return [];
+}
+
+interface StreamingTextProjectionOptions {
+  activeItemId: string | undefined;
+  assignActiveItemId: (itemId: string) => void;
+  createdAt: string;
+  delta: string;
+  kind: "assistant" | "thinking";
+  prefix: string;
+}
+
+function projectStreamingText(
+  state: TimelineProjectionState,
+  input: ProjectionInput,
+  options: StreamingTextProjectionOptions,
+): HostEvent[] {
+  if (!options.activeItemId) {
+    const itemId = syntheticId(state, options.prefix);
+    options.assignActiveItemId(itemId);
+    const item: TimelineItem = {
+      id: itemId,
+      kind: options.kind,
+      text: "",
+      createdAt: options.createdAt,
+    };
+    return [timelineItem(input, item), timelineDelta(input, item.id, options.delta)];
+  }
+
+  return [timelineDelta(input, options.activeItemId, options.delta)];
+}
+
+function resetActiveMessageItems(state: TimelineProjectionState): void {
+  delete state.activeAssistantItemId;
+  delete state.activeThinkingItemId;
 }
 
 function timelineItem(input: ProjectionInput, item: TimelineItem): HostEvent {
