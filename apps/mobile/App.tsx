@@ -559,6 +559,7 @@ function ReadToolOutput({
         language={language}
         scrollViewProps={{
           contentContainerStyle: styles.syntaxHighlighterContent,
+          style: styles.syntaxHighlighterScroll,
         }}
         textStyle={styles.syntaxHighlighterText}
         wrapLongLines
@@ -1048,6 +1049,11 @@ const styles = StyleSheet.create({
   },
   syntaxHighlighterContent: {
     backgroundColor: palette.bodyBg,
+    minWidth: "100%",
+  },
+  syntaxHighlighterScroll: {
+    backgroundColor: palette.bodyBg,
+    width: "100%",
   },
   syntaxHighlighterText: {
     fontFamily: MONO_FONT,
