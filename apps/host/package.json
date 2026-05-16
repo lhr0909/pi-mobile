@@ -1,0 +1,24 @@
+{
+  "name": "@pi-mobile/host",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "pi-mobile-host": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --dir .",
+    "test:coverage": "vitest run --dir . --coverage"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.74.0",
+    "@pi-mobile/shared": "workspace:*",
+    "ws": "^8.20.0"
+  }
+}

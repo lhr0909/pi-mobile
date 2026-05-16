@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.expo/
+web-build/
+.DS_Store
+*.log
+*.tsbuildinfo
+pi-session-*.html
+.env
+.env.*
+!.env.example

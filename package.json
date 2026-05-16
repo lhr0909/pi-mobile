@@ -1,0 +1,27 @@
+{
+  "name": "pi-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm --filter @pi-mobile/shared build && pnpm -r --if-present typecheck",
+    "test": "pnpm --filter @pi-mobile/shared build && pnpm -r --if-present test",
+    "test:coverage": "pnpm --filter @pi-mobile/shared build && pnpm -r --if-present test:coverage",
+    "dev:host": "pnpm --filter @pi-mobile/host dev",
+    "dev:host:web": "PI_MOBILE_HOST_CORS_ORIGIN=http://localhost:8082 pnpm dev:host",
+    "dev:app": "pnpm --filter @pi-mobile/app start",
+    "web:export": "pnpm --filter @pi-mobile/app web:export",
+    "web:serve": "pnpm --filter @pi-mobile/app web:serve",
+    "web:test": "pnpm --filter @pi-mobile/app web:test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.0.15",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
+  }
+}
