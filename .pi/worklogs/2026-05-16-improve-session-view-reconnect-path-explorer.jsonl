@@ -68,3 +68,9 @@
 {"type":"observation_added","observationId":"observation-24","source":"git push && gh pr create","observation":"Pushed branch feat/session-view-history-path-explorer to origin and opened PR #4: https://github.com/lhr0909/pi-mobile/pull/4.","createdAt":"2026-05-16T04:22:09.832Z"}
 {"type":"task_finished","taskId":"task-9","finishedAt":"2026-05-16T04:22:15.419Z"}
 {"type":"task_log_added","logId":"log-18","taskId":"task-9","content":"Pushed origin/feat/session-view-history-path-explorer and opened PR #4 for review: https://github.com/lhr0909/pi-mobile/pull/4.","createdAt":"2026-05-16T04:22:15.419Z"}
+{"type":"task_created","taskId":"task-10","title":"Fix GitHub PR message formatting","createdAt":"2026-05-16T07:17:10.555Z"}
+{"type":"task_started","taskId":"task-10","startedAt":"2026-05-16T07:17:15.764Z"}
+{"type":"task_log_added","logId":"log-19","taskId":"task-10","content":"The PR body on GitHub contains literal backslash-n sequences from the original gh pr create command. Updating the PR body with real Markdown newlines and a cleaner title/body.","createdAt":"2026-05-16T07:17:15.764Z"}
+{"type":"observation_added","observationId":"observation-25","source":"gh pr view/edit PR #4","observation":"PR #4 body had literal backslash-n sequences. Updated the PR title to 'Improve mobile session setup and reconnect flow' and replaced the body with properly formatted Markdown sections and validation bullets.","createdAt":"2026-05-16T07:17:36.279Z"}
+{"type":"task_finished","taskId":"task-10","finishedAt":"2026-05-16T07:17:42.073Z"}
+{"type":"task_log_added","logId":"log-20","taskId":"task-10","content":"Fixed PR #4 title/body on GitHub and verified the rendered body now contains real Markdown newlines instead of literal \\n sequences.","createdAt":"2026-05-16T07:17:42.073Z"}
