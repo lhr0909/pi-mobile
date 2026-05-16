@@ -78,6 +78,16 @@ describe("app view model", () => {
     expect(reduceAppViewState(collapsed, { type: "toggleSessionHeader" }).sessionHeaderCollapsed).toBe(false);
   });
 
+  it("sets non-connection errors", () => {
+    const state = reduceAppViewState(createInitialAppViewState("http://localhost:4739"), {
+      type: "setError",
+      message: "Session not found",
+    });
+
+    expect(state.errorMessage).toBe("Session not found");
+    expect(state.connectionState).toBe("disconnected");
+  });
+
   it("clears prompt after send", () => {
     const state = reduceAppViewState(createInitialAppViewState("http://localhost:4739"), {
       type: "setPrompt",

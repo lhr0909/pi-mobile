@@ -32,7 +32,8 @@ export type AppAction =
   | { type: "connected"; status: HostStatus }
   | { type: "disconnected"; errorMessage?: string }
   | { type: "hostEvent"; event: HostEvent }
-  | { type: "clearPrompt" };
+  | { type: "clearPrompt" }
+  | { type: "setError"; message: string };
 
 export function createInitialAppViewState(defaultHostUrl: string): AppViewState {
   return {
@@ -88,6 +89,8 @@ export function reduceAppViewState(state: AppViewState, action: AppAction): AppV
     }
     case "clearPrompt":
       return { ...state, prompt: "" };
+    case "setError":
+      return { ...state, errorMessage: action.message };
   }
 }
 

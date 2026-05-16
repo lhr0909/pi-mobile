@@ -7,12 +7,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -23,6 +25,7 @@ import {
 import CodeHighlighter, { type ReactStyle } from "react-native-code-highlighter";
 import Markdown from "react-native-markdown-display";
 import type {
+  DirectoryList,
   JsonValue,
   SessionSnapshot,
   TimelineItem,
@@ -33,6 +36,17 @@ import {
   reduceAppViewState,
   type AppViewState,
 } from "./src/app-view-model";
+import {
+  emptyClientHistory,
+  loadClientHistory,
+  normalizeHistoryHostUrl,
+  rememberHost,
+  rememberSession,
+  saveClientHistory,
+  type ClientHistory,
+  type RecentHost,
+  type RecentSession,
+} from "./src/client-history";
 import { HostClient } from "./src/host-client";
 import {
   nextPinnedToBottom,
@@ -62,13 +76,14 @@ export default function App() {
     reduceAppViewState,
     createInitialAppViewState(DEFAULT_HOST_URL),
   );
+  const [history, setHistory] = useState<ClientHistory>(() => emptyClientHistory());
+  const [directoryList, setDirectoryList] = useState<DirectoryList | undefined>();
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [directoryError, setDirectoryError] = useState<string | undefined>();
+  const historyRef = useRef(history);
   const socketRef = useRef<WebSocket | null>(null);
   const client = useMemo(
-    () =>
-      new HostClient({
-        baseUrl: state.hostUrl,
-        ...(state.token.trim() ? { token: state.token.trim() } : {}),
-      }),
+    () => createHostClient(state.hostUrl, state.token),
     [state.hostUrl, state.token],
   );
 
@@ -76,39 +91,123 @@ export default function App() {
     ? state.client.sessions[state.client.activeSessionId]
     : undefined;
 
-  const connect = async () => {
-    dispatch({ type: "connecting" });
-    try {
-      const status = await client.status();
-      socketRef.current?.close();
-      socketRef.current = client.connectEvents((event) =>
-        dispatch({ type: "hostEvent", event }),
-      );
-      dispatch({ type: "connected", status });
-    } catch (error) {
-      dispatch({
-        type: "disconnected",
-        errorMessage: error instanceof Error ? error.message : String(error),
+  useEffect(() => {
+    let mounted = true;
+    void loadClientHistory(AsyncStorage)
+      .then((loadedHistory) => {
+        if (!mounted) return;
+        historyRef.current = loadedHistory;
+        setHistory(loadedHistory);
+      })
+      .catch((error) => {
+        if (mounted) {
+          dispatch({ type: "setError", message: toErrorMessage(error) });
+        }
       });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const persistHistory = (nextHistory: ClientHistory) => {
+    historyRef.current = nextHistory;
+    setHistory(nextHistory);
+    void saveClientHistory(AsyncStorage, nextHistory).catch((error) => {
+      dispatch({ type: "setError", message: toErrorMessage(error) });
+    });
+  };
+
+  const browseDirectories = async (directoryClient: HostClient, directoryPath = "~") => {
+    setDirectoryLoading(true);
+    setDirectoryError(undefined);
+    try {
+      const nextDirectoryList = await directoryClient.listDirectories(directoryPath);
+      setDirectoryList(nextDirectoryList);
+      return nextDirectoryList;
+    } catch (error) {
+      setDirectoryError(toErrorMessage(error));
+      return undefined;
+    } finally {
+      setDirectoryLoading(false);
     }
+  };
+
+  const connectToHost = async (hostUrl: string): Promise<HostClient> => {
+    const normalizedHostUrl = normalizeHistoryHostUrl(hostUrl);
+    const nextClient = createHostClient(normalizedHostUrl, state.token);
+    dispatch({ type: "setHostUrl", value: normalizedHostUrl });
+    dispatch({ type: "connecting" });
+    const status = await nextClient.status();
+    socketRef.current?.close();
+    socketRef.current = nextClient.connectEvents((event) =>
+      dispatch({ type: "hostEvent", event }),
+    );
+    dispatch({ type: "connected", status });
+    persistHistory(rememberHost(historyRef.current, normalizedHostUrl));
+    await browseDirectories(nextClient);
+    return nextClient;
+  };
+
+  const connect = async () => {
+    try {
+      await connectToHost(state.hostUrl);
+    } catch (error) {
+      dispatch({ type: "disconnected", errorMessage: toErrorMessage(error) });
+    }
+  };
+
+  const rememberOpenedSession = (hostUrl: string, snapshot: SessionSnapshot) => {
+    persistHistory(rememberSession(historyRef.current, hostUrl, snapshot.session));
+  };
+
+  const openNewSession = async (sessionClient: HostClient, hostUrl: string, cwd: string) => {
+    const snapshot = await sessionClient.openSession({ cwd, mode: "new" });
+    dispatch({ type: "hostEvent", event: { type: "session_opened", snapshot } });
+    rememberOpenedSession(hostUrl, snapshot);
   };
 
   const openSession = async () => {
     if (!state.cwd.trim()) return;
     try {
-      const snapshot = await client.openSession({
-        cwd: state.cwd.trim(),
-        mode: "new",
-      });
-      dispatch({
-        type: "hostEvent",
-        event: { type: "session_opened", snapshot },
-      });
+      await openNewSession(client, normalizeHistoryHostUrl(state.hostUrl), state.cwd.trim());
     } catch (error) {
-      dispatch({
-        type: "disconnected",
-        errorMessage: error instanceof Error ? error.message : String(error),
+      dispatch({ type: "setError", message: toErrorMessage(error) });
+    }
+  };
+
+  const openNewSessionFromHistory = async (session: RecentSession) => {
+    try {
+      const sessionClient = await connectToHost(session.hostUrl);
+      dispatch({ type: "setCwd", value: session.cwd });
+      await openNewSession(sessionClient, session.hostUrl, session.cwd);
+    } catch (error) {
+      dispatch({ type: "setError", message: toErrorMessage(error) });
+    }
+  };
+
+  const openPreviousSession = async (session: RecentSession) => {
+    try {
+      const sessionClient = await connectToHost(session.hostUrl);
+      dispatch({ type: "setCwd", value: session.cwd });
+      const sessionFile = session.sessionFile ?? await findSessionFile(sessionClient, session);
+      if (!sessionFile) {
+        throw new Error("Previous session was not found on this host");
+      }
+      const snapshot = await sessionClient.openSession({
+        cwd: session.cwd,
+        sessionFile,
+        mode: "open",
       });
+      dispatch({ type: "hostEvent", event: { type: "session_opened", snapshot } });
+      rememberOpenedSession(session.hostUrl, snapshot);
+    } catch (error) {
+      dispatch({ type: "setError", message: toErrorMessage(error) });
+    }
+  };
+
+  const selectExplorerPath = () => {
+    if (directoryList) {
+      dispatch({ type: "setCwd", value: directoryList.path });
     }
   };
 
@@ -141,12 +240,23 @@ export default function App() {
     <SafeAreaView style={styles.screen}>
       {showConnection ? (
         <ConnectionScreen
+          directoryError={directoryError}
+          directoryList={directoryList}
+          directoryLoading={directoryLoading}
+          history={history}
           state={state}
+          onBrowseDirectory={(path) => void browseDirectories(client, path)}
           onConnect={connect}
-          onOpenSession={openSession}
-          onHostUrlChange={(value) => dispatch({ type: "setHostUrl", value })}
-          onTokenChange={(value) => dispatch({ type: "setToken", value })}
+          onConnectRecentHost={(host) => void connectToHost(host.hostUrl).catch((error) => {
+            dispatch({ type: "disconnected", errorMessage: toErrorMessage(error) });
+          })}
           onCwdChange={(value) => dispatch({ type: "setCwd", value })}
+          onHostUrlChange={(value) => dispatch({ type: "setHostUrl", value })}
+          onOpenNewSessionFromHistory={(session) => void openNewSessionFromHistory(session)}
+          onOpenPreviousSession={(session) => void openPreviousSession(session)}
+          onOpenSession={openSession}
+          onSelectExplorerPath={selectExplorerPath}
+          onTokenChange={(value) => dispatch({ type: "setToken", value })}
         />
       ) : (
         <SessionScreen
@@ -165,22 +275,56 @@ export default function App() {
   );
 }
 
+function createHostClient(hostUrl: string, token: string): HostClient {
+  return new HostClient({
+    baseUrl: hostUrl.trim() ? hostUrl : DEFAULT_HOST_URL,
+    ...(token.trim() ? { token: token.trim() } : {}),
+  });
+}
+
+async function findSessionFile(client: HostClient, session: RecentSession): Promise<string | undefined> {
+  const sessions = await client.listSessions(session.cwd);
+  return sessions.find(candidate => candidate.id === session.sessionId)?.sessionFile;
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 interface ConnectionScreenProps {
   state: AppViewState;
+  history: ClientHistory;
+  directoryList: DirectoryList | undefined;
+  directoryLoading: boolean;
+  directoryError: string | undefined;
   onConnect: () => void;
+  onConnectRecentHost: (host: RecentHost) => void;
   onOpenSession: () => void;
+  onOpenPreviousSession: (session: RecentSession) => void;
+  onOpenNewSessionFromHistory: (session: RecentSession) => void;
   onHostUrlChange: (value: string) => void;
   onTokenChange: (value: string) => void;
   onCwdChange: (value: string) => void;
+  onBrowseDirectory: (path: string) => void;
+  onSelectExplorerPath: () => void;
 }
 
 function ConnectionScreen({
   state,
+  history,
+  directoryList,
+  directoryLoading,
+  directoryError,
   onConnect,
+  onConnectRecentHost,
   onOpenSession,
+  onOpenPreviousSession,
+  onOpenNewSessionFromHistory,
   onHostUrlChange,
   onTokenChange,
   onCwdChange,
+  onBrowseDirectory,
+  onSelectExplorerPath,
 }: ConnectionScreenProps) {
   const pathIsAbsolute =
     state.cwd.trim().length === 0 || isAbsoluteHostPath(state.cwd);
@@ -190,11 +334,22 @@ function ConnectionScreen({
     pathIsAbsolute;
 
   return (
-    <View style={styles.connectionScreen}>
+    <ScrollView
+      contentContainerStyle={styles.connectionScreen}
+      keyboardShouldPersistTaps="handled"
+      style={styles.connectionScroll}
+    >
       <View style={styles.brandHeader}>
         <Text style={styles.appTitle}>Pi Mobile</Text>
-        <Text style={styles.helpText}>SDK host MVP · mobile session UI</Text>
+        <Text style={styles.helpText}>Quickly reconnect to your Pi hosts and sessions.</Text>
       </View>
+
+      <RecentHostsPanel hosts={history.hosts} onConnect={onConnectRecentHost} />
+      <RecentSessionsPanel
+        sessions={history.sessions}
+        onOpenNew={onOpenNewSessionFromHistory}
+        onOpenPrevious={onOpenPreviousSession}
+      />
 
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Connect to host</Text>
@@ -206,7 +361,7 @@ function ConnectionScreen({
           onChangeText={onHostUrlChange}
           style={styles.input}
         />
-        <Text style={styles.label}>Token</Text>
+        <Text style={styles.label}>Bearer token (optional)</Text>
         <TextInput
           accessibilityLabel="Host Token"
           autoCapitalize="none"
@@ -236,12 +391,12 @@ function ConnectionScreen({
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Session path</Text>
-        <Text style={styles.label}>Absolute workspace path on the host</Text>
+        <Text style={styles.panelTitle}>Workspace</Text>
+        <Text style={styles.label}>Selected host path</Text>
         <TextInput
           accessibilityLabel="Session Path"
           autoCapitalize="none"
-          placeholder="Connect to seed /absolute/path"
+          placeholder="Connect, browse, or paste /absolute/path"
           placeholderTextColor={palette.dim}
           value={state.cwd}
           onChangeText={onCwdChange}
@@ -249,8 +404,8 @@ function ConnectionScreen({
         />
         <Text style={pathIsAbsolute ? styles.dimLine : styles.warningLine}>
           {pathIsAbsolute
-            ? "Uses the host cwd after connect unless you enter an absolute path."
-            : "Enter an absolute host path before opening a session."}
+            ? "Browse from ~ below, then use the current directory as the session path."
+            : "Use an absolute host path before opening a session."}
         </Text>
         <PiButton
           accessibilityLabel="New Session"
@@ -260,6 +415,164 @@ function ConnectionScreen({
           variant="secondary"
         />
       </View>
+
+      <PathExplorerPanel
+        connectionState={state.connectionState}
+        directoryError={directoryError}
+        directoryList={directoryList}
+        loading={directoryLoading}
+        onBrowseDirectory={onBrowseDirectory}
+        onSelectCurrentPath={onSelectExplorerPath}
+      />
+    </ScrollView>
+  );
+}
+
+function RecentHostsPanel({
+  hosts,
+  onConnect,
+}: {
+  hosts: RecentHost[];
+  onConnect: (host: RecentHost) => void;
+}) {
+  if (hosts.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.panel}>
+      <Text style={styles.panelTitle}>Recent hosts</Text>
+      {hosts.map(host => (
+        <View key={host.hostUrl} style={styles.historyRow}>
+          <View style={styles.historyTextBlock}>
+            <Text numberOfLines={1} style={styles.historyTitle}>{host.hostUrl}</Text>
+            <Text style={styles.dimLine}>last connected {formatTime(host.lastConnectedAt)}</Text>
+          </View>
+          <PiButton
+            accessibilityLabel={`Connect to ${host.hostUrl}`}
+            label="Connect"
+            onPress={() => onConnect(host)}
+            variant="ghost"
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function RecentSessionsPanel({
+  sessions,
+  onOpenNew,
+  onOpenPrevious,
+}: {
+  sessions: RecentSession[];
+  onOpenNew: (session: RecentSession) => void;
+  onOpenPrevious: (session: RecentSession) => void;
+}) {
+  if (sessions.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.panel}>
+      <Text style={styles.panelTitle}>Recent sessions</Text>
+      {sessions.map(session => (
+        <View key={`${session.hostUrl}:${session.cwd}:${session.sessionId}`} style={styles.sessionHistoryRow}>
+          <Text numberOfLines={1} style={styles.historyTitle}>{session.title}</Text>
+          <Text numberOfLines={1} style={styles.dimLine}>{session.cwd}</Text>
+          <Text numberOfLines={1} style={styles.dimLine}>
+            {session.hostUrl} · {shortSessionId(session.sessionId)}
+          </Text>
+          <View style={styles.historyActions}>
+            <PiButton
+              accessibilityLabel={`Open previous session ${session.sessionId}`}
+              label="Open previous"
+              onPress={() => onOpenPrevious(session)}
+              variant="secondary"
+            />
+            <PiButton
+              accessibilityLabel={`Open new session in ${session.cwd}`}
+              label="New here"
+              onPress={() => onOpenNew(session)}
+              variant="ghost"
+            />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function PathExplorerPanel({
+  connectionState,
+  directoryList,
+  directoryError,
+  loading,
+  onBrowseDirectory,
+  onSelectCurrentPath,
+}: {
+  connectionState: AppViewState["connectionState"];
+  directoryList: DirectoryList | undefined;
+  directoryError: string | undefined;
+  loading: boolean;
+  onBrowseDirectory: (path: string) => void;
+  onSelectCurrentPath: () => void;
+}) {
+  const connected = connectionState === "connected";
+
+  return (
+    <View style={styles.panel}>
+      <Text style={styles.panelTitle}>Path explorer</Text>
+      <Text numberOfLines={1} style={styles.pathExplorerCurrent}>
+        {directoryList?.path ?? "~"}
+      </Text>
+      <View style={styles.historyActions}>
+        <PiButton
+          accessibilityLabel="Browse home directory"
+          disabled={!connected || loading}
+          label="Home ~"
+          onPress={() => onBrowseDirectory("~")}
+          variant="ghost"
+        />
+        <PiButton
+          accessibilityLabel="Browse parent directory"
+          disabled={!connected || loading || !directoryList?.parentPath}
+          label="Up"
+          onPress={() => directoryList?.parentPath ? onBrowseDirectory(directoryList.parentPath) : undefined}
+          variant="ghost"
+        />
+        <PiButton
+          accessibilityLabel="Use current directory"
+          disabled={!connected || !directoryList}
+          label="Use this path"
+          onPress={onSelectCurrentPath}
+          variant="secondary"
+        />
+      </View>
+      {!connected ? (
+        <Text style={styles.dimLine}>Connect a host to browse directories from ~.</Text>
+      ) : null}
+      {loading ? <Text style={styles.statusLine}>Loading directories…</Text> : null}
+      {directoryError ? <Text style={styles.errorLine}>{directoryError}</Text> : null}
+      {connected && directoryList && !loading ? (
+        <View style={styles.directoryList}>
+          {directoryList.entries.length === 0 ? (
+            <Text style={styles.dimLine}>No child directories.</Text>
+          ) : (
+            directoryList.entries.map(entry => (
+              <Pressable
+                accessibilityLabel={`Browse ${entry.name}`}
+                accessibilityRole="button"
+                key={entry.path}
+                onPress={() => onBrowseDirectory(entry.path)}
+                style={styles.directoryRow}
+              >
+                <Text numberOfLines={1} style={styles.directoryName}>▸ {entry.name}/</Text>
+              </Pressable>
+            ))
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -990,7 +1303,8 @@ const piSyntaxStyle: ReactStyle = {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bodyBg },
   sessionKeyboardView: { flex: 1 },
-  connectionScreen: { flex: 1, padding: 18, gap: 18, justifyContent: "center" },
+  connectionScroll: { flex: 1 },
+  connectionScreen: { gap: 18, padding: 18, paddingBottom: 28 },
   brandHeader: { gap: 6 },
   appTitle: {
     ...monoText,
@@ -1042,6 +1356,53 @@ const styles = StyleSheet.create({
     color: palette.error,
     fontSize: 12,
     lineHeight: 18,
+  },
+  historyRow: {
+    alignItems: "center",
+    borderColor: palette.dim,
+    borderRadius: 4,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 10,
+  },
+  sessionHistoryRow: {
+    borderColor: palette.dim,
+    borderRadius: 4,
+    borderWidth: 1,
+    gap: 6,
+    padding: 10,
+  },
+  historyTextBlock: { flex: 1, gap: 2 },
+  historyTitle: {
+    ...monoText,
+    color: palette.text,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 19,
+  },
+  historyActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  pathExplorerCurrent: {
+    ...monoText,
+    color: palette.accent,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  directoryList: { gap: 6 },
+  directoryRow: {
+    backgroundColor: palette.userBg,
+    borderColor: palette.dim,
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  directoryName: {
+    ...monoText,
+    color: palette.text,
+    fontSize: 13,
+    lineHeight: 19,
   },
   sessionScreen: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
   sessionHeader: {
