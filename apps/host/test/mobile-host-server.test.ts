@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { HostController } from "../src/host-controller.js";
@@ -36,6 +39,24 @@ describe("MobileHostServer", () => {
 
       expect(promptResponse.status).toBe(202);
       expect(factory.created[0]?.prompts[0]?.message).toBe("hello");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("lists host directories", async () => {
+    const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "pi-mobile-server-directories-"));
+    await fs.mkdir(path.join(tempDirectory, "project"));
+    await fs.writeFile(path.join(tempDirectory, "file.txt"), "skip");
+    const { baseUrl, server } = await startServer();
+    try {
+      const response = await fetch(`${baseUrl}/api/directories?path=${encodeURIComponent(tempDirectory)}`);
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        path: tempDirectory,
+        entries: [{ name: "project", path: path.join(tempDirectory, "project") }],
+      });
     } finally {
       await server.close();
     }

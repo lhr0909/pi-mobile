@@ -104,6 +104,11 @@ export class MobileHostServer {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/directories") {
+      writeJson(response, 200, await this.controller.listDirectories(url.searchParams.get("path") ?? "~"));
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/api/sessions") {
       const snapshot = await this.controller.openSession(parseOpenSessionRequest(await readJsonBody(request)));
       writeJson(response, 201, snapshot);
