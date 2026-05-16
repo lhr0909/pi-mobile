@@ -1,6 +1,8 @@
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type {
+  DirectoryList,
   ExtensionUiResponse,
   HostEvent,
   HostStatus,
@@ -42,6 +44,22 @@ export class HostController {
       const activeState = active.get(summary.sessionFile);
       return activeState ?? summary;
     });
+  }
+
+  async listDirectories(directoryPath = "~"): Promise<DirectoryList> {
+    const resolvedPath = resolveHostPath(directoryPath);
+    const entries = await fs.readdir(resolvedPath, { withFileTypes: true });
+    const directories = entries
+      .filter(entry => entry.isDirectory())
+      .map(entry => ({ name: entry.name, path: path.join(resolvedPath, entry.name) }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    const parentPath = path.dirname(resolvedPath);
+
+    return {
+      path: resolvedPath,
+      ...(parentPath === resolvedPath ? {} : { parentPath }),
+      entries: directories,
+    };
   }
 
   async openSession(request: OpenSessionRequest): Promise<SessionSnapshot> {
@@ -106,4 +124,15 @@ function normalizeOpenSessionRequest(request: OpenSessionRequest): OpenSessionRe
     cwd: path.resolve(request.cwd),
     ...(request.sessionFile ? { sessionFile: path.resolve(request.sessionFile) } : {}),
   };
+}
+
+function resolveHostPath(input: string): string {
+  const value = input.trim() || "~";
+  if (value === "~") {
+    return os.homedir();
+  }
+  if (value.startsWith("~/") || value.startsWith("~\\")) {
+    return path.resolve(os.homedir(), value.slice(2));
+  }
+  return path.resolve(value);
 }

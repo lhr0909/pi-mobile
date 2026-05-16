@@ -40,6 +40,17 @@ export interface SessionState extends SessionSummary {
   pendingMessageCount: number;
 }
 
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+}
+
+export interface DirectoryList {
+  path: string;
+  parentPath?: string;
+  entries: DirectoryEntry[];
+}
+
 export interface TranscriptItem {
   id: string;
   kind: "user" | "assistant";

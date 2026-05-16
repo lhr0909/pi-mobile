@@ -25,8 +25,9 @@ The implementation follows the research decision: **SDK-hosted TypeScript daemon
 - Expo / React Native + TypeScript.
 - iPhone-first MVP with separate connection and session screens.
 - Connects to a configured host URL and optional token.
-- Seeds the session path from the host's absolute cwd after connect; the connection screen expects an absolute workspace path before opening a new session.
-- Opens a new Pi session for that workspace path, then switches into the session view.
+- Persists recent hosts and recent host/path/session combinations on the client for quick reconnects.
+- Seeds the session path from the host's absolute cwd after connect, and includes a simple host directory explorer starting from `~` so mobile users can choose paths without typing absolute paths.
+- Opens a new Pi session for the selected workspace path, or reopens a previous persisted session when a saved session file is available, then switches into the session view.
 - Shows live status, expanded tool, thinking, user, and assistant timeline items with a dark monospaced style based on Pi's session export/TUI palette.
 - Keeps streamed thinking/text blocks and tool calls in event order, with exact tool-call arguments and tool input/output shown fully expanded for now.
 - Renders bash/read tool cards with TUI-like call lines, command output, read path/range headers, and syntax-highlighted read file contents.
@@ -104,10 +105,11 @@ The app defaults to `http://localhost:4739`, which works for an iOS simulator ta
 Flow:
 
 1. Open the connection screen.
-2. Enter the host URL and optional token.
-3. Tap **Connect host**. The app reads `/api/host/status` and fills the session path with the host's absolute cwd unless you already entered an absolute path.
-4. Tap **Open new session** to create a Pi session and move into the session view.
-5. Use the bottom composer to send prompts, steer/follow up, or abort the active turn.
+2. Use a saved host/session row if one exists, or enter the host URL and optional token.
+3. Tap **Connect host**. The app reads `/api/host/status`, remembers the host locally, fills the session path with the host's absolute cwd unless you already entered an absolute path, and loads the path explorer at `~`.
+4. Choose a path with the directory explorer and tap **Use this path**, paste an absolute path manually, or choose **New here** / **Open previous** from a saved session row.
+5. Tap **Open new session** to create a Pi session for the selected path, or **Open previous** to reopen a saved session file, then move into the session view.
+6. Use the bottom composer to send prompts, steer/follow up, or abort the active turn.
 
 When simulator tapping is unreliable, use Expo Web for browser-based mobile viewport smoke tests. Start these in separate terminals:
 
@@ -131,6 +133,7 @@ Expo Web is a fast UI/protocol smoke test; keep the iOS simulator or a dev-clien
 | `GET` | `/api/health` | unauthenticated health check |
 | `GET` | `/api/host/status` | host metadata |
 | `GET` | `/api/sessions?cwd=/path` | list stored sessions |
+| `GET` | `/api/directories?path=~` | list child directories for the mobile path explorer |
 | `POST` | `/api/sessions` | open/create a session with `{ cwd, mode?, sessionFile? }` |
 | `GET` | `/api/sessions/:id/snapshot` | current session snapshot |
 | `GET` | `/api/sessions/:id/events?since=N` | replay host events after `N` |
@@ -181,7 +184,7 @@ If the simulator automation runner cannot interact with the app, capture a scree
 ## MVP limitations
 
 - No hosted relay yet; use direct LAN, localhost, Tailscale, or an SSH tunnel.
-- No persistent mobile host registry or QR pairing yet.
+- No QR pairing yet; recent hosts/sessions are saved locally on the mobile client only.
 - No push notifications yet.
 - Mobile extension UI requests are emitted by the host, but the current app does not yet render response dialogs.
 - SDK host process owns active turns; a daemon crash ends in-flight work, while persisted Pi sessions can be reopened.

@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { HostController } from "../src/host-controller.js";
@@ -20,6 +22,24 @@ describe("HostController", () => {
     expect(factory.created[0]?.steers).toEqual(["change course"]);
     expect(factory.created[0]?.followUps).toEqual(["then test"]);
     expect(factory.created[0]?.abortCount).toBe(1);
+  });
+
+  it("lists child directories for the path explorer", async () => {
+    const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "pi-mobile-directories-"));
+    await fs.mkdir(path.join(tempDirectory, "zeta"));
+    await fs.mkdir(path.join(tempDirectory, "alpha"));
+    await fs.writeFile(path.join(tempDirectory, "README.md"), "not a directory");
+
+    const controller = new HostController(new FakeRuntimeFactory());
+
+    await expect(controller.listDirectories(tempDirectory)).resolves.toEqual({
+      path: tempDirectory,
+      parentPath: path.dirname(tempDirectory),
+      entries: [
+        { name: "alpha", path: path.join(tempDirectory, "alpha") },
+        { name: "zeta", path: path.join(tempDirectory, "zeta") },
+      ],
+    });
   });
 
   it("normalizes relative session paths before using the runtime", async () => {

@@ -1,4 +1,13 @@
-import type { HostEvent, HostStatus, OpenSessionRequest, PromptCommand, SessionSnapshot, SessionSummary, TextCommand } from "@pi-mobile/shared";
+import type {
+  DirectoryList,
+  HostEvent,
+  HostStatus,
+  OpenSessionRequest,
+  PromptCommand,
+  SessionSnapshot,
+  SessionSummary,
+  TextCommand,
+} from "@pi-mobile/shared";
 
 export interface HostClientOptions {
   baseUrl: string;
@@ -23,6 +32,10 @@ export class HostClient {
     const query = cwd ? `?cwd=${encodeURIComponent(cwd)}` : "";
     const response = await this.getJson<{ sessions: SessionSummary[] }>(`/api/sessions${query}`);
     return response.sessions;
+  }
+
+  async listDirectories(path = "~"): Promise<DirectoryList> {
+    return this.getJson<DirectoryList>(`/api/directories?path=${encodeURIComponent(path)}`);
   }
 
   async openSession(request: OpenSessionRequest): Promise<SessionSnapshot> {
