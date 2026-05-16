@@ -1,12 +1,52 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { FlatList, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  FlatList,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import CodeHighlighter, { type ReactStyle } from "react-native-code-highlighter";
 import Markdown from "react-native-markdown-display";
-import type { JsonValue, SessionSnapshot, TimelineItem } from "@pi-mobile/shared";
-import { createInitialAppViewState, isAbsoluteHostPath, reduceAppViewState, type AppViewState } from "./src/app-view-model";
+import type {
+  JsonValue,
+  SessionSnapshot,
+  TimelineItem,
+} from "@pi-mobile/shared";
+import {
+  createInitialAppViewState,
+  isAbsoluteHostPath,
+  reduceAppViewState,
+  type AppViewState,
+} from "./src/app-view-model";
 import { HostClient } from "./src/host-client";
+import {
+  formatJson,
+  getBashCallParts,
+  getReadCallParts,
+  getReadLanguage,
+  normalizeBashOutput,
+  normalizeReadOutput,
+  replaceTabs,
+} from "./src/tool-rendering";
 
-const DEFAULT_HOST_URL = "http://127.0.0.1:4739";
-const MONO_FONT = Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }) ?? "monospace";
+const DEFAULT_HOST_URL = "http://localhost:4739";
+const MONO_FONT =
+  Platform.select({
+    ios: "Menlo",
+    android: "monospace",
+    default: "monospace",
+  }) ?? "monospace";
 
 export default function App() {
   const [state, dispatch] = useReducer(
@@ -15,10 +55,11 @@ export default function App() {
   );
   const socketRef = useRef<WebSocket | null>(null);
   const client = useMemo(
-    () => new HostClient({
-      baseUrl: state.hostUrl,
-      ...(state.token.trim() ? { token: state.token.trim() } : {}),
-    }),
+    () =>
+      new HostClient({
+        baseUrl: state.hostUrl,
+        ...(state.token.trim() ? { token: state.token.trim() } : {}),
+      }),
     [state.hostUrl, state.token],
   );
 
@@ -31,20 +72,34 @@ export default function App() {
     try {
       const status = await client.status();
       socketRef.current?.close();
-      socketRef.current = client.connectEvents(event => dispatch({ type: "hostEvent", event }));
+      socketRef.current = client.connectEvents((event) =>
+        dispatch({ type: "hostEvent", event }),
+      );
       dispatch({ type: "connected", status });
     } catch (error) {
-      dispatch({ type: "disconnected", errorMessage: error instanceof Error ? error.message : String(error) });
+      dispatch({
+        type: "disconnected",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
     }
   };
 
   const openSession = async () => {
     if (!state.cwd.trim()) return;
     try {
-      const snapshot = await client.openSession({ cwd: state.cwd.trim(), mode: "new" });
-      dispatch({ type: "hostEvent", event: { type: "session_opened", snapshot } });
+      const snapshot = await client.openSession({
+        cwd: state.cwd.trim(),
+        mode: "new",
+      });
+      dispatch({
+        type: "hostEvent",
+        event: { type: "session_opened", snapshot },
+      });
     } catch (error) {
-      dispatch({ type: "disconnected", errorMessage: error instanceof Error ? error.message : String(error) });
+      dispatch({
+        type: "disconnected",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
     }
   };
 
@@ -80,9 +135,9 @@ export default function App() {
           state={state}
           onConnect={connect}
           onOpenSession={openSession}
-          onHostUrlChange={value => dispatch({ type: "setHostUrl", value })}
-          onTokenChange={value => dispatch({ type: "setToken", value })}
-          onCwdChange={value => dispatch({ type: "setCwd", value })}
+          onHostUrlChange={(value) => dispatch({ type: "setHostUrl", value })}
+          onTokenChange={(value) => dispatch({ type: "setToken", value })}
+          onCwdChange={(value) => dispatch({ type: "setCwd", value })}
         />
       ) : (
         <SessionScreen
@@ -94,7 +149,7 @@ export default function App() {
           onSteer={steer}
           onFollowUp={followUp}
           onAbort={abort}
-          onPromptChange={value => dispatch({ type: "setPrompt", value })}
+          onPromptChange={(value) => dispatch({ type: "setPrompt", value })}
         />
       )}
     </SafeAreaView>
@@ -118,8 +173,12 @@ function ConnectionScreen({
   onTokenChange,
   onCwdChange,
 }: ConnectionScreenProps) {
-  const pathIsAbsolute = state.cwd.trim().length === 0 || isAbsoluteHostPath(state.cwd);
-  const canOpenSession = state.connectionState === "connected" && state.cwd.trim().length > 0 && pathIsAbsolute;
+  const pathIsAbsolute =
+    state.cwd.trim().length === 0 || isAbsoluteHostPath(state.cwd);
+  const canOpenSession =
+    state.connectionState === "connected" &&
+    state.cwd.trim().length > 0 &&
+    pathIsAbsolute;
 
   return (
     <View style={styles.connectionScreen}>
@@ -150,13 +209,21 @@ function ConnectionScreen({
         <PiButton
           accessibilityLabel="Connect"
           disabled={state.connectionState === "connecting"}
-          label={state.connectionState === "connecting" ? "Connecting…" : "Connect host"}
+          label={
+            state.connectionState === "connecting"
+              ? "Connecting…"
+              : "Connect host"
+          }
           onPress={onConnect}
           variant="primary"
         />
         <Text style={styles.statusLine}>Status: {state.connectionState}</Text>
-        {state.client.connectionMessage ? <Text style={styles.dimLine}>{state.client.connectionMessage}</Text> : null}
-        {state.errorMessage ? <Text style={styles.errorLine}>{state.errorMessage}</Text> : null}
+        {state.client.connectionMessage ? (
+          <Text style={styles.dimLine}>{state.client.connectionMessage}</Text>
+        ) : null}
+        {state.errorMessage ? (
+          <Text style={styles.errorLine}>{state.errorMessage}</Text>
+        ) : null}
       </View>
 
       <View style={styles.panel}>
@@ -172,7 +239,9 @@ function ConnectionScreen({
           style={styles.input}
         />
         <Text style={pathIsAbsolute ? styles.dimLine : styles.warningLine}>
-          {pathIsAbsolute ? "Uses the host cwd after connect unless you enter an absolute path." : "Enter an absolute host path before opening a session."}
+          {pathIsAbsolute
+            ? "Uses the host cwd after connect unless you enter an absolute path."
+            : "Enter an absolute host path before opening a session."}
         </Text>
         <PiButton
           accessibilityLabel="New Session"
@@ -213,7 +282,9 @@ function SessionScreen({
     <View style={styles.sessionScreen}>
       <View style={styles.sessionHeader}>
         <View style={styles.headerTopRow}>
-          <Text style={styles.sessionTitle}>Session: {shortSessionId(snapshot.session.id)}</Text>
+          <Text style={styles.sessionTitle}>
+            Session: {shortSessionId(snapshot.session.id)}
+          </Text>
           <View style={styles.headerActions}>
             <PiButton
               accessibilityLabel="Toggle Session Header"
@@ -221,27 +292,49 @@ function SessionScreen({
               onPress={onToggleHeader}
               variant="ghost"
             />
-            <PiButton accessibilityLabel="Connection" label="Host" onPress={onShowConnection} variant="ghost" />
+            <PiButton
+              accessibilityLabel="Connection"
+              label="Host"
+              onPress={onShowConnection}
+              variant="ghost"
+            />
           </View>
         </View>
         {state.sessionHeaderCollapsed ? (
-          <Text numberOfLines={1} style={styles.collapsedHeaderSummary}>{snapshot.session.cwd}</Text>
+          <Text numberOfLines={1} style={styles.collapsedHeaderSummary}>
+            {snapshot.session.cwd}
+          </Text>
         ) : (
           <>
             <InfoRow label="Path" value={snapshot.session.cwd} />
             <InfoRow label="State" value={snapshot.session.runState} />
-            <InfoRow label="Messages" value={String(snapshot.session.messageCount)} />
-            {snapshot.session.thinkingLevel ? <InfoRow label="Thinking" value={snapshot.session.thinkingLevel} /> : null}
-            {snapshot.session.model ? <InfoRow label="Model" value={formatModel(snapshot.session.model)} /> : null}
+            <InfoRow
+              label="Messages"
+              value={String(snapshot.session.messageCount)}
+            />
+            {snapshot.session.thinkingLevel ? (
+              <InfoRow
+                label="Thinking"
+                value={snapshot.session.thinkingLevel}
+              />
+            ) : null}
+            {snapshot.session.model ? (
+              <InfoRow
+                label="Model"
+                value={formatModel(snapshot.session.model)}
+              />
+            ) : null}
           </>
         )}
       </View>
 
       <FlatList
         data={snapshot.timeline}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         renderItem={({ item }) => <TimelineRow item={item} />}
-        ListEmptyComponent={<Text style={styles.empty}>Send a prompt to start the timeline.</Text>}
+        ListEmptyComponent={
+          <Text style={styles.empty}>Send a prompt to start the timeline.</Text>
+        }
         contentContainerStyle={styles.timelineContent}
         style={styles.timeline}
       />
@@ -270,7 +363,18 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-const WORKING_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const WORKING_SPINNER_FRAMES = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+];
 const WORKING_SPINNER_INTERVAL_MS = 80;
 
 function WorkingIndicator() {
@@ -278,14 +382,16 @@ function WorkingIndicator() {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      setFrameIndex(index => (index + 1) % WORKING_SPINNER_FRAMES.length);
+      setFrameIndex((index) => (index + 1) % WORKING_SPINNER_FRAMES.length);
     }, WORKING_SPINNER_INTERVAL_MS);
     return () => clearInterval(intervalId);
   }, []);
 
   return (
     <View style={styles.workingIndicator}>
-      <Text style={styles.workingGlyph}>{WORKING_SPINNER_FRAMES[frameIndex]}</Text>
+      <Text style={styles.workingGlyph}>
+        {WORKING_SPINNER_FRAMES[frameIndex]}
+      </Text>
       <Text style={styles.workingText}>Working...</Text>
     </View>
   );
@@ -293,18 +399,15 @@ function WorkingIndicator() {
 
 function TimelineRow({ item }: { item: TimelineItem }) {
   if (item.kind === "status") {
-    return <Text style={[styles.statusItem, statusToneStyle(item.tone)]}>{formatTime(item.createdAt)}  {item.text}</Text>;
+    return (
+      <Text style={[styles.statusItem, statusToneStyle(item.tone)]}>
+        {formatTime(item.createdAt)} {item.text}
+      </Text>
+    );
   }
 
   if (item.kind === "tool") {
-    return (
-      <View style={[styles.toolCard, toolCardStyle(item.status)]}>
-        <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
-        <Text style={styles.toolTitle}>{toolTitle(item.title, item.status)}</Text>
-        {item.args !== undefined ? <ToolSection label="Input" text={formatToolArgs(item.title, item.args)} /> : null}
-        {item.detail ? <ToolSection label="Output" text={item.detail} /> : null}
-      </View>
-    );
+    return <ToolTimelineItem item={item} />;
   }
 
   if (item.kind === "assistant") {
@@ -332,19 +435,167 @@ function TimelineRow({ item }: { item: TimelineItem }) {
   );
 }
 
-function ToolSection({ label, text }: { label: string; text: string }) {
+type ToolTimelineItemData = Extract<TimelineItem, { kind: "tool" }>;
+
+function ToolTimelineItem({ item }: { item: ToolTimelineItemData }) {
+  if (item.title === "bash") {
+    return <BashToolCard item={item} />;
+  }
+
+  if (item.title === "read") {
+    return <ReadToolCard item={item} />;
+  }
+
+  return <GenericToolCard item={item} />;
+}
+
+function BashToolCard({ item }: { item: ToolTimelineItemData }) {
+  const call = getBashCallParts(item.args);
+  const output = item.detail ? normalizeBashOutput(item.detail) : "";
+
   return (
-    <View style={styles.toolSection}>
-      <Text style={styles.toolSectionLabel}>{label}</Text>
-      <View style={styles.toolCodeBlock}>
-        <Text style={styles.toolCodeText}>{text}</Text>
-      </View>
+    <ToolCard item={item}>
+      <Text style={styles.toolCallLine}>
+        <Text
+          style={call.invalidCommand ? styles.toolErrorText : styles.toolName}
+        >
+          {call.commandText}
+        </Text>
+        {call.timeoutText ? (
+          <Text style={styles.toolMutedSuffix}> {call.timeoutText}</Text>
+        ) : null}
+      </Text>
+      <ToolArguments args={item.args} />
+      {output ? <PlainToolOutput text={output} /> : null}
+    </ToolCard>
+  );
+}
+
+function ReadToolCard({ item }: { item: ToolTimelineItemData }) {
+  const call = getReadCallParts(item.args);
+  const output = item.detail ? normalizeReadOutput(item.detail) : "";
+
+  return (
+    <ToolCard item={item}>
+      <Text style={styles.toolCallLine}>
+        <Text style={styles.toolName}>read</Text>{" "}
+        <Text style={call.invalidPath ? styles.toolErrorText : styles.toolPath}>
+          {call.pathText}
+        </Text>
+        {call.lineRangeText ? (
+          <Text style={styles.toolLineRange}>{call.lineRangeText}</Text>
+        ) : null}
+      </Text>
+      <ToolArguments args={item.args} />
+      {output ? (
+        <ReadToolOutput language={getReadLanguage(item.args)} text={output} />
+      ) : null}
+    </ToolCard>
+  );
+}
+
+function GenericToolCard({ item }: { item: ToolTimelineItemData }) {
+  const output = item.detail ? replaceTabs(item.detail) : "";
+
+  return (
+    <ToolCard item={item}>
+      <Text style={styles.toolCallLine}>{toolTitle(item.title, item.status)}</Text>
+      <ToolArguments args={item.args} />
+      {output ? <PlainToolOutput text={output} /> : null}
+    </ToolCard>
+  );
+}
+
+function ToolCard({
+  children,
+  item,
+}: {
+  children: ReactNode;
+  item: ToolTimelineItemData;
+}) {
+  return (
+    <View style={[styles.toolCard, toolCardStyle(item.status)]}>
+      <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
+      {children}
     </View>
   );
 }
 
-function MarkdownText({ text, thinking = false }: { text: string; thinking?: boolean }) {
-  return <Markdown style={thinking ? thinkingMarkdownStyles : markdownStyles}>{text}</Markdown>;
+function ToolArguments({ args }: { args: JsonValue | undefined }) {
+  if (args === undefined) {
+    return null;
+  }
+
+  return (
+    <ToolSection label="Arguments">
+      <Text style={styles.toolArgsText}>{formatJson(args)}</Text>
+    </ToolSection>
+  );
+}
+
+function PlainToolOutput({ text }: { text: string }) {
+  return (
+    <ToolSection label="Output">
+      <Text style={styles.toolOutputText}>{text}</Text>
+    </ToolSection>
+  );
+}
+
+function ReadToolOutput({
+  language,
+  text,
+}: {
+  language: string | undefined;
+  text: string;
+}) {
+  if (!language) {
+    return <PlainToolOutput text={text} />;
+  }
+
+  return (
+    <ToolSection label="Output">
+      <CodeHighlighter
+        hljsStyle={piSyntaxStyle}
+        language={language}
+        scrollViewProps={{
+          contentContainerStyle: styles.syntaxHighlighterContent,
+        }}
+        textStyle={styles.syntaxHighlighterText}
+        wrapLongLines
+      >
+        {text}
+      </CodeHighlighter>
+    </ToolSection>
+  );
+}
+
+function ToolSection({
+  children,
+  label,
+}: {
+  children: ReactNode;
+  label: string;
+}) {
+  return (
+    <View style={styles.toolSection}>
+      <Text style={styles.toolSectionLabel}>{label}</Text>
+      <View style={styles.toolCodeBlock}>{children}</View>
+    </View>
+  );
+}
+
+function MarkdownText({
+  text,
+  thinking = false,
+}: {
+  text: string;
+  thinking?: boolean;
+}) {
+  return (
+    <Markdown style={thinking ? thinkingMarkdownStyles : markdownStyles}>
+      {text}
+    </Markdown>
+  );
 }
 
 interface ComposerProps {
@@ -357,7 +608,15 @@ interface ComposerProps {
   onAbort: () => void;
 }
 
-function Composer({ cwd, prompt, onPromptChange, onSendPrompt, onSteer, onFollowUp, onAbort }: ComposerProps) {
+function Composer({
+  cwd,
+  prompt,
+  onPromptChange,
+  onSendPrompt,
+  onSteer,
+  onFollowUp,
+  onAbort,
+}: ComposerProps) {
   return (
     <View style={styles.composer}>
       <TextInput
@@ -370,12 +629,34 @@ function Composer({ cwd, prompt, onPromptChange, onSendPrompt, onSteer, onFollow
         style={styles.promptInput}
       />
       <View style={styles.commandRow}>
-        <PiButton accessibilityLabel="Send" label="Send" onPress={onSendPrompt} variant="primary" />
-        <PiButton accessibilityLabel="Steer" label="Steer" onPress={onSteer} variant="ghost" />
-        <PiButton accessibilityLabel="Follow Up" label="Follow-up" onPress={onFollowUp} variant="ghost" />
-        <PiButton accessibilityLabel="Abort" label="Abort" onPress={onAbort} variant="danger" />
+        <PiButton
+          accessibilityLabel="Send"
+          label="Send"
+          onPress={onSendPrompt}
+          variant="primary"
+        />
+        <PiButton
+          accessibilityLabel="Steer"
+          label="Steer"
+          onPress={onSteer}
+          variant="ghost"
+        />
+        <PiButton
+          accessibilityLabel="Follow Up"
+          label="Follow-up"
+          onPress={onFollowUp}
+          variant="ghost"
+        />
+        <PiButton
+          accessibilityLabel="Abort"
+          label="Abort"
+          onPress={onAbort}
+          variant="danger"
+        />
       </View>
-      <Text numberOfLines={1} style={styles.composerFooter}>{cwd} · mobile · sdk</Text>
+      <Text numberOfLines={1} style={styles.composerFooter}>
+        {cwd} · mobile · sdk
+      </Text>
     </View>
   );
 }
@@ -388,15 +669,32 @@ interface PiButtonProps {
   disabled?: boolean;
 }
 
-function PiButton({ accessibilityLabel, disabled = false, label, onPress, variant }: PiButtonProps) {
+function PiButton({
+  accessibilityLabel,
+  disabled = false,
+  label,
+  onPress,
+  variant,
+}: PiButtonProps) {
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
       onPress={onPress}
-      style={[styles.piButton, buttonVariantStyle(variant), disabled ? styles.disabledButton : null]}
+      style={[
+        styles.piButton,
+        buttonVariantStyle(variant),
+        disabled ? styles.disabledButton : null,
+      ]}
     >
-      <Text style={[styles.buttonText, variant === "primary" ? styles.primaryButtonText : null]}>{label}</Text>
+      <Text
+        style={[
+          styles.buttonText,
+          variant === "primary" ? styles.primaryButtonText : null,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -446,36 +744,21 @@ function shortSessionId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
 
-function toolTitle(title: string, status: "running" | "done" | "error"): string {
+function toolTitle(
+  title: string,
+  status: "running" | "done" | "error",
+): string {
   if (title === "bash") {
     return status === "running" ? "Running command..." : "Command result";
   }
   return `${title} · ${status}`;
 }
 
-function formatToolArgs(title: string, args: JsonValue): string {
-  if (title === "bash" && args && typeof args === "object" && !Array.isArray(args)) {
-    const command = args.command;
-    if (typeof command === "string") {
-      return `$ ${command}`;
-    }
-  }
-  return formatJson(args);
-}
-
-function formatJson(value: JsonValue): string {
-  if (typeof value === "string") {
-    try {
-      return JSON.stringify(JSON.parse(value), null, 2);
-    } catch {
-      return value;
-    }
-  }
-  return JSON.stringify(value, null, 2);
-}
-
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatModel(model: unknown): string {
@@ -486,7 +769,8 @@ function formatModel(model: unknown): string {
   if (model && typeof model === "object" && !Array.isArray(model)) {
     const fields = model as Record<string, unknown>;
     const id = typeof fields.id === "string" ? fields.id : undefined;
-    const provider = typeof fields.provider === "string" ? fields.provider : undefined;
+    const provider =
+      typeof fields.provider === "string" ? fields.provider : undefined;
     const name = typeof fields.name === "string" ? fields.name : undefined;
     if (id && provider) return `${provider}/${id}`;
     if (id) return id;
@@ -506,7 +790,25 @@ const palette = {
   customLabel: "#9575cd",
   dim: "#666666",
   error: "#cc6666",
+  mdCode: "#8abeb7",
+  mdCodeBlock: "#b5bd68",
+  mdCodeBlockBorder: "#808080",
+  mdHeading: "#f0c674",
+  mdHr: "#808080",
+  mdLink: "#81a2be",
+  mdListBullet: "#8abeb7",
+  mdQuote: "#808080",
+  mdQuoteBorder: "#808080",
   muted: "#808080",
+  syntaxComment: "#6A9955",
+  syntaxFunction: "#DCDCAA",
+  syntaxKeyword: "#569CD6",
+  syntaxNumber: "#B5CEA8",
+  syntaxOperator: "#D4D4D4",
+  syntaxPunctuation: "#D4D4D4",
+  syntaxString: "#CE9178",
+  syntaxType: "#4EC9B0",
+  syntaxVariable: "#9CDCFE",
   text: "#e5e5e7",
   toolError: "#3c2828",
   toolPending: "#282832",
@@ -520,14 +822,73 @@ const monoText = {
   fontFamily: MONO_FONT,
 };
 
+const piSyntaxStyle: ReactStyle = {
+  hljs: {
+    background: palette.bodyBg,
+    color: palette.mdCodeBlock,
+  },
+  "hljs-addition": { color: palette.accent },
+  "hljs-attr": { color: palette.syntaxVariable },
+  "hljs-attribute": { color: palette.syntaxVariable },
+  "hljs-built_in": { color: palette.syntaxType },
+  "hljs-bullet": { color: palette.mdListBullet },
+  "hljs-comment": { color: palette.syntaxComment },
+  "hljs-deletion": { color: palette.error },
+  "hljs-doctag": { color: palette.syntaxKeyword },
+  "hljs-function": { color: palette.syntaxFunction },
+  "hljs-keyword": { color: palette.syntaxKeyword },
+  "hljs-literal": { color: palette.syntaxKeyword },
+  "hljs-meta": { color: palette.syntaxComment },
+  "hljs-name": { color: palette.syntaxKeyword },
+  "hljs-number": { color: palette.syntaxNumber },
+  "hljs-operator": { color: palette.syntaxOperator },
+  "hljs-params": { color: palette.text },
+  "hljs-property": { color: palette.syntaxVariable },
+  "hljs-punctuation": { color: palette.syntaxPunctuation },
+  "hljs-quote": { color: palette.syntaxComment },
+  "hljs-regexp": { color: palette.syntaxString },
+  "hljs-section": { color: palette.syntaxFunction },
+  "hljs-selector-class": { color: palette.syntaxType },
+  "hljs-selector-id": { color: palette.syntaxType },
+  "hljs-selector-tag": { color: palette.syntaxKeyword },
+  "hljs-string": { color: palette.syntaxString },
+  "hljs-symbol": { color: palette.syntaxVariable },
+  "hljs-tag": { color: palette.syntaxKeyword },
+  "hljs-template-variable": { color: palette.syntaxVariable },
+  "hljs-title": { color: palette.syntaxFunction },
+  "hljs-type": { color: palette.syntaxType },
+  "hljs-variable": { color: palette.syntaxVariable },
+};
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bodyBg },
   connectionScreen: { flex: 1, padding: 18, gap: 18, justifyContent: "center" },
   brandHeader: { gap: 6 },
-  appTitle: { ...monoText, color: palette.borderAccent, fontSize: 30, fontWeight: "800" },
-  helpText: { ...monoText, color: palette.warning, fontSize: 14, lineHeight: 21 },
-  panel: { backgroundColor: palette.containerBg, borderRadius: 4, gap: 10, padding: 18 },
-  panelTitle: { ...monoText, color: palette.customLabel, fontSize: 18, fontWeight: "800", marginBottom: 6 },
+  appTitle: {
+    ...monoText,
+    color: palette.borderAccent,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  helpText: {
+    ...monoText,
+    color: palette.warning,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  panel: {
+    backgroundColor: palette.containerBg,
+    borderRadius: 4,
+    gap: 10,
+    padding: 18,
+  },
+  panelTitle: {
+    ...monoText,
+    color: palette.customLabel,
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
   label: { ...monoText, color: palette.muted, fontSize: 12, fontWeight: "700" },
   input: {
     ...monoText,
@@ -542,44 +903,157 @@ const styles = StyleSheet.create({
   },
   statusLine: { ...monoText, color: palette.accent, fontSize: 12 },
   dimLine: { ...monoText, color: palette.dim, fontSize: 12, lineHeight: 18 },
-  warningLine: { ...monoText, color: palette.warning, fontSize: 12, lineHeight: 18 },
-  errorLine: { ...monoText, color: palette.error, fontSize: 12, lineHeight: 18 },
+  warningLine: {
+    ...monoText,
+    color: palette.warning,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  errorLine: {
+    ...monoText,
+    color: palette.error,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   sessionScreen: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
-  sessionHeader: { backgroundColor: palette.containerBg, borderRadius: 4, gap: 6, padding: 18 },
-  headerTopRow: { alignItems: "center", flexDirection: "row", gap: 12, justifyContent: "space-between" },
+  sessionHeader: {
+    backgroundColor: palette.containerBg,
+    borderRadius: 4,
+    gap: 6,
+    padding: 18,
+  },
+  headerTopRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
   headerActions: { flexDirection: "row", gap: 8 },
-  sessionTitle: { ...monoText, color: palette.borderAccent, flex: 1, fontSize: 18, fontWeight: "800" },
-  collapsedHeaderSummary: { ...monoText, color: palette.dim, fontSize: 12, lineHeight: 18 },
+  sessionTitle: {
+    ...monoText,
+    color: palette.borderAccent,
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  collapsedHeaderSummary: {
+    ...monoText,
+    color: palette.dim,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   infoRow: { alignItems: "baseline", flexDirection: "row", gap: 8 },
-  infoLabel: { ...monoText, color: palette.dim, fontSize: 12, fontWeight: "800", minWidth: 74 },
-  infoValue: { ...monoText, color: palette.text, flex: 1, fontSize: 12, lineHeight: 18 },
+  infoLabel: {
+    ...monoText,
+    color: palette.dim,
+    fontSize: 12,
+    fontWeight: "800",
+    minWidth: 74,
+  },
+  infoValue: {
+    ...monoText,
+    color: palette.text,
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   timeline: { flex: 1 },
   timelineContent: { gap: 18, paddingVertical: 18 },
-  workingIndicator: { alignItems: "center", flexDirection: "row", gap: 10, paddingHorizontal: 18, paddingVertical: 10 },
-  workingGlyph: { ...monoText, color: palette.accent, fontSize: 16, lineHeight: 24, minWidth: 18 },
-  workingText: { ...monoText, color: palette.muted, fontSize: 16, lineHeight: 24 },
+  workingIndicator: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  workingGlyph: {
+    ...monoText,
+    color: palette.accent,
+    fontSize: 16,
+    lineHeight: 24,
+    minWidth: 18,
+  },
+  workingText: {
+    ...monoText,
+    color: palette.muted,
+    fontSize: 16,
+    lineHeight: 24,
+  },
   empty: { ...monoText, color: palette.muted, fontSize: 14, padding: 18 },
   timestamp: { ...monoText, color: palette.dim, fontSize: 11, marginBottom: 8 },
-  statusItem: { ...monoText, fontSize: 12, lineHeight: 18, paddingHorizontal: 18 },
+  statusItem: {
+    ...monoText,
+    fontSize: 12,
+    lineHeight: 18,
+    paddingHorizontal: 18,
+  },
   statusInfo: { color: palette.dim },
   statusSuccess: { color: palette.accent },
   statusWarning: { color: palette.warning },
   statusError: { color: palette.error },
-  userMessage: { backgroundColor: palette.userBg, borderRadius: 4, padding: 18 },
+  userMessage: {
+    backgroundColor: palette.userBg,
+    borderRadius: 4,
+    padding: 18,
+  },
   assistantMessage: { paddingHorizontal: 18 },
   thinkingBlock: { padding: 18 },
-  thinkingText: { ...monoText, color: palette.muted, fontSize: 15, fontStyle: "italic", lineHeight: 24 },
+  thinkingText: {
+    ...monoText,
+    color: palette.muted,
+    fontSize: 15,
+    fontStyle: "italic",
+    lineHeight: 24,
+  },
   messageText: { ...monoText, fontSize: 15, fontWeight: "700", lineHeight: 24 },
   toolCard: { borderRadius: 4, padding: 18 },
   toolPending: { backgroundColor: palette.toolPending },
   toolSuccess: { backgroundColor: palette.toolSuccess },
   toolError: { backgroundColor: palette.toolError },
-  toolTitle: { ...monoText, color: palette.text, fontSize: 15, fontWeight: "800", lineHeight: 24 },
-  toolOutput: { ...monoText, color: palette.muted, fontSize: 13, lineHeight: 20, marginTop: 4 },
+  toolCallLine: {
+    ...monoText,
+    color: palette.text,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 24,
+  },
+  toolName: { color: palette.text, fontWeight: "800" },
+  toolPath: { color: palette.accent, fontWeight: "400" },
+  toolLineRange: { color: palette.warning, fontWeight: "400" },
+  toolMutedSuffix: { color: palette.muted, fontWeight: "400" },
+  toolErrorText: { color: palette.error, fontWeight: "800" },
   toolSection: { gap: 6, marginTop: 10 },
-  toolSectionLabel: { ...monoText, color: palette.muted, fontSize: 12, fontWeight: "800" },
-  toolCodeBlock: { backgroundColor: palette.bodyBg, borderRadius: 4, padding: 10 },
-  toolCodeText: { ...monoText, color: palette.text, fontSize: 13, lineHeight: 20 },
+  toolSectionLabel: {
+    ...monoText,
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  toolCodeBlock: {
+    backgroundColor: palette.bodyBg,
+    borderRadius: 4,
+    padding: 10,
+  },
+  toolArgsText: {
+    ...monoText,
+    color: palette.dim,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  toolOutputText: {
+    ...monoText,
+    color: palette.muted,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  syntaxHighlighterContent: {
+    backgroundColor: palette.bodyBg,
+  },
+  syntaxHighlighterText: {
+    fontFamily: MONO_FONT,
+    fontSize: 13,
+    lineHeight: 20,
+  },
   composer: { gap: 8, paddingBottom: 10 },
   promptInput: {
     ...monoText,
@@ -597,42 +1071,179 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   commandRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  composerFooter: { ...monoText, color: palette.dim, fontSize: 12, lineHeight: 18 },
-  piButton: { alignItems: "center", borderRadius: 4, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7 },
-  primaryButton: { backgroundColor: palette.borderAccent, borderColor: palette.borderAccent },
-  secondaryButton: { backgroundColor: "transparent", borderColor: palette.border },
+  composerFooter: {
+    ...monoText,
+    color: palette.dim,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  piButton: {
+    alignItems: "center",
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  primaryButton: {
+    backgroundColor: palette.borderAccent,
+    borderColor: palette.borderAccent,
+  },
+  secondaryButton: {
+    backgroundColor: "transparent",
+    borderColor: palette.border,
+  },
   ghostButton: { backgroundColor: "transparent", borderColor: palette.border },
   dangerButton: { backgroundColor: "transparent", borderColor: palette.error },
   disabledButton: { opacity: 0.45 },
-  buttonText: { ...monoText, color: palette.text, fontSize: 12, fontWeight: "800" },
+  buttonText: {
+    ...monoText,
+    color: palette.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
   primaryButtonText: { color: palette.bodyBg },
 });
 
 const markdownStyles = StyleSheet.create({
-  body: { ...monoText, fontSize: 15, fontWeight: "700", lineHeight: 24 },
+  body: {
+    ...monoText,
+    color: palette.text,
+    fontSize: 15,
+    fontWeight: "400",
+    lineHeight: 24,
+  },
+  text: { ...monoText, color: palette.text, fontWeight: "400" },
   paragraph: { marginBottom: 0, marginTop: 0 },
-  heading1: { ...monoText, color: palette.borderAccent, fontSize: 16, fontWeight: "800", lineHeight: 24, marginBottom: 0, marginTop: 12 },
-  heading2: { ...monoText, color: palette.borderAccent, fontSize: 15, fontWeight: "800", lineHeight: 24, marginBottom: 0, marginTop: 12 },
-  heading3: { ...monoText, color: palette.borderAccent, fontSize: 15, fontWeight: "800", lineHeight: 24, marginBottom: 0, marginTop: 12 },
+  heading1: {
+    ...monoText,
+    color: palette.mdHeading,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 24,
+    marginBottom: 0,
+    marginTop: 12,
+    textDecorationLine: "underline",
+  },
+  heading2: {
+    ...monoText,
+    color: palette.mdHeading,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 24,
+    marginBottom: 0,
+    marginTop: 12,
+  },
+  heading3: {
+    ...monoText,
+    color: palette.mdHeading,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 24,
+    marginBottom: 0,
+    marginTop: 12,
+  },
   bullet_list: { marginBottom: 0, marginTop: 8 },
   ordered_list: { marginBottom: 0, marginTop: 8 },
   list_item: { marginBottom: 0 },
-  bullet_list_icon: { color: palette.warning },
-  ordered_list_icon: { color: palette.warning },
-  code_inline: { ...monoText, backgroundColor: palette.containerBg, color: palette.warning, fontSize: 14 },
-  code_block: { ...monoText, backgroundColor: palette.containerBg, borderColor: palette.dim, borderWidth: 1, color: palette.text, fontSize: 13, lineHeight: 20, padding: 10 },
-  fence: { ...monoText, backgroundColor: palette.containerBg, borderColor: palette.dim, borderWidth: 1, color: palette.text, fontSize: 13, lineHeight: 20, padding: 10 },
-  blockquote: { borderLeftColor: palette.customLabel, borderLeftWidth: 3, marginBottom: 0, marginTop: 8, paddingLeft: 10 },
-  link: { color: palette.borderAccent, textDecorationLine: "underline" },
+  bullet_list_icon: { color: palette.mdListBullet },
+  ordered_list_icon: { color: palette.mdListBullet },
+  code_inline: {
+    ...monoText,
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    color: palette.mdCode,
+    fontSize: 14,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  code_block: {
+    ...monoText,
+    backgroundColor: "transparent",
+    borderColor: palette.mdCodeBlockBorder,
+    borderRadius: 4,
+    borderWidth: 1,
+    color: palette.mdCodeBlock,
+    fontSize: 13,
+    lineHeight: 20,
+    padding: 10,
+  },
+  fence: {
+    ...monoText,
+    backgroundColor: "transparent",
+    borderColor: palette.mdCodeBlockBorder,
+    borderRadius: 4,
+    borderWidth: 1,
+    color: palette.mdCodeBlock,
+    fontSize: 13,
+    lineHeight: 20,
+    padding: 10,
+  },
+  blockquote: {
+    borderLeftColor: palette.mdQuoteBorder,
+    borderLeftWidth: 3,
+    color: palette.mdQuote,
+    fontStyle: "italic",
+    marginBottom: 0,
+    marginTop: 8,
+    paddingLeft: 10,
+  },
+  link: { color: palette.mdLink, textDecorationLine: "underline" },
   strong: { fontWeight: "800" },
   em: { fontStyle: "italic" },
+  hr: { backgroundColor: palette.mdHr, height: 1 },
 });
 
 const thinkingMarkdownStyles = StyleSheet.create({
   ...markdownStyles,
-  body: { ...monoText, color: palette.muted, fontSize: 15, fontStyle: "italic", lineHeight: 24 },
+  body: {
+    ...monoText,
+    color: palette.muted,
+    fontSize: 15,
+    fontStyle: "italic",
+    lineHeight: 24,
+  },
   text: { color: palette.muted, fontStyle: "italic" },
-  code_inline: { ...monoText, backgroundColor: palette.containerBg, color: palette.muted, fontSize: 14, fontStyle: "italic" },
-  fence: { ...monoText, backgroundColor: palette.containerBg, borderColor: palette.dim, borderWidth: 1, color: palette.muted, fontSize: 13, fontStyle: "italic", lineHeight: 20, padding: 10 },
-  code_block: { ...monoText, backgroundColor: palette.containerBg, borderColor: palette.dim, borderWidth: 1, color: palette.muted, fontSize: 13, fontStyle: "italic", lineHeight: 20, padding: 10 },
+  code_inline: {
+    ...monoText,
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    color: palette.muted,
+    fontSize: 14,
+    fontStyle: "italic",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  fence: {
+    ...monoText,
+    backgroundColor: "transparent",
+    borderColor: palette.mdCodeBlockBorder,
+    borderRadius: 4,
+    borderWidth: 1,
+    color: palette.muted,
+    fontSize: 13,
+    fontStyle: "italic",
+    lineHeight: 20,
+    padding: 10,
+  },
+  code_block: {
+    ...monoText,
+    backgroundColor: "transparent",
+    borderColor: palette.mdCodeBlockBorder,
+    borderRadius: 4,
+    borderWidth: 1,
+    color: palette.muted,
+    fontSize: 13,
+    fontStyle: "italic",
+    lineHeight: 20,
+    padding: 10,
+  },
+  blockquote: {
+    borderLeftColor: palette.mdQuoteBorder,
+    borderLeftWidth: 3,
+    color: palette.muted,
+    fontStyle: "italic",
+    marginBottom: 0,
+    marginTop: 8,
+    paddingLeft: 10,
+  },
 });

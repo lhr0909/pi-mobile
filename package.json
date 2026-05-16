@@ -10,7 +10,7 @@
     "test": "pnpm --filter @pi-mobile/shared build && pnpm -r --if-present test",
     "test:coverage": "pnpm --filter @pi-mobile/shared build && pnpm -r --if-present test:coverage",
     "dev:host": "pnpm --filter @pi-mobile/host dev",
-    "dev:host:web": "PI_MOBILE_HOST_CORS_ORIGIN=http://127.0.0.1:8082 pnpm dev:host",
+    "dev:host:web": "PI_MOBILE_HOST_CORS_ORIGIN=http://localhost:8082 pnpm dev:host",
     "dev:app": "pnpm --filter @pi-mobile/app start",
     "web:export": "pnpm --filter @pi-mobile/app web:export",
     "web:serve": "pnpm --filter @pi-mobile/app web:serve",

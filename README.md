@@ -28,8 +28,9 @@ The implementation follows the research decision: **SDK-hosted TypeScript daemon
 - Seeds the session path from the host's absolute cwd after connect; the connection screen expects an absolute workspace path before opening a new session.
 - Opens a new Pi session for that workspace path, then switches into the session view.
 - Shows live status, expanded tool, thinking, user, and assistant timeline items with a dark monospaced style based on Pi's session export/TUI palette.
-- Keeps streamed thinking/text blocks and tool calls in event order, with tool input/output shown fully expanded for now.
-- Renders user, thinking, and assistant text as Markdown.
+- Keeps streamed thinking/text blocks and tool calls in event order, with exact tool-call arguments and tool input/output shown fully expanded for now.
+- Renders bash/read tool cards with TUI-like call lines, command output, read path/range headers, and syntax-highlighted read file contents.
+- Renders user, thinking, and assistant text as Markdown with Pi TUI-inspired colors.
 - Records accepted mobile prompts as user timeline cards so the submitted message appears before assistant output.
 - Shows a compact animated TUI-style `Working...` spinner while Pi is streaming/compacting instead of adding `Agent started` / `Agent finished` timeline prompts.
 - Includes a collapsible session header for reducing metadata height during active chat.
@@ -71,9 +72,9 @@ pnpm dev:host
 
 Defaults:
 
-- Bind: `127.0.0.1`
+- Bind: `localhost`
 - Port: `4739`
-- URL: `http://127.0.0.1:4739`
+- URL: `http://localhost:4739`
 
 Environment:
 
@@ -98,7 +99,7 @@ pnpm dev:host:web
 pnpm dev:app
 ```
 
-The app defaults to `http://127.0.0.1:4739`, which works for an iOS simulator talking to a host daemon running on the same Mac. For a physical phone, use a LAN/Tailscale-reachable host URL and set `PI_MOBILE_HOST_BIND=0.0.0.0` on the host.
+The app defaults to `http://localhost:4739`, which works for an iOS simulator talking to a host daemon running on the same Mac. For a physical phone, use a LAN/Tailscale-reachable host URL and set `PI_MOBILE_HOST_BIND=0.0.0.0` on the host.
 
 Flow:
 
@@ -115,10 +116,10 @@ pnpm dev:host:web
 pnpm web:test
 ```
 
-Then open `http://127.0.0.1:8082`, or drive it with `agent-browser`:
+Then open `http://localhost:8082`, or drive it with `agent-browser`:
 
 ```bash
-agent-browser --session pi-mobile-web batch "set device \"iPhone 14\"" "open http://127.0.0.1:8082" "snapshot -i"
+agent-browser --session pi-mobile-web batch "set device \"iPhone 14\"" "open http://localhost:8082" "snapshot -i"
 ```
 
 Expo Web is a fast UI/protocol smoke test; keep the iOS simulator or a dev-client/device run for native-specific behavior.

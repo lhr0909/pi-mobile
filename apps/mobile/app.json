@@ -14,7 +14,7 @@
       "package": "works.earendil.pi.mobile"
     },
     "extra": {
-      "defaultHostUrl": "http://127.0.0.1:4739"
+      "defaultHostUrl": "http://localhost:4739"
     }
   }
 }
