@@ -59,3 +59,9 @@
 {"type":"observation_added","observationId":"observation-21","source":"git push && gh pr create","observation":"Pushed branch fix/resume-chat-state to origin and opened PR #5: https://github.com/lhr0909/pi-mobile/pull/5.","createdAt":"2026-05-16T15:26:01.885Z"}
 {"type":"task_finished","taskId":"task-7","finishedAt":"2026-05-16T15:26:04.459Z"}
 {"type":"task_log_added","logId":"log-18","taskId":"task-7","content":"Opened PR #5: https://github.com/lhr0909/pi-mobile/pull/5.","createdAt":"2026-05-16T15:26:04.459Z"}
+{"type":"task_created","taskId":"task-8","title":"Fix PR title/body formatting","createdAt":"2026-05-16T15:38:56.451Z"}
+{"type":"task_started","taskId":"task-8","startedAt":"2026-05-16T15:38:59.079Z"}
+{"type":"task_log_added","logId":"log-19","taskId":"task-8","content":"Inspecting PR #5 metadata and replacing the body with properly formatted Markdown if needed.","createdAt":"2026-05-16T15:38:59.079Z"}
+{"type":"observation_added","observationId":"observation-22","source":"gh pr view/edit PR #5","observation":"PR #5 body initially contained literal backslash-n sequences. Replaced it with properly formatted Markdown Summary and Validation sections.","createdAt":"2026-05-16T15:39:29.050Z"}
+{"type":"task_finished","taskId":"task-8","finishedAt":"2026-05-16T15:39:32.401Z"}
+{"type":"task_log_added","logId":"log-20","taskId":"task-8","content":"Updated PR #5 body via --body-file and verified the body now contains real Markdown newlines.","createdAt":"2026-05-16T15:39:32.401Z"}
