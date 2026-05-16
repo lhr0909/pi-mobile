@@ -299,7 +299,7 @@ function SessionScreen({
   }, []);
 
   const keepTimelineAtBottom = useCallback(() => {
-    if (timelinePinnedToBottom) {
+    if (timelinePinnedToBottom && !userScrollActiveRef.current) {
       scrollTimelineToEnd(false);
     }
   }, [scrollTimelineToEnd, timelinePinnedToBottom]);
