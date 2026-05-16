@@ -690,10 +690,23 @@ function ToolSection({
   children: ReactNode;
   label: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <View style={styles.toolSection}>
-      <Text style={styles.toolSectionLabel}>{label}</Text>
-      <View style={styles.toolCodeBlock}>{children}</View>
+      <Pressable
+        accessibilityLabel={`${expanded ? "Collapse" : "Expand"} tool ${label.toLowerCase()}`}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        hitSlop={8}
+        onPress={() => setExpanded((value) => !value)}
+        style={styles.toolSectionHeader}
+      >
+        <Text style={styles.toolSectionChevron}>{expanded ? "▾" : "▸"}</Text>
+        <Text style={styles.toolSectionLabel}>{label}</Text>
+        <Text style={styles.toolSectionHint}>{expanded ? "hide" : "show"}</Text>
+      </Pressable>
+      {expanded ? <View style={styles.toolCodeBlock}>{children}</View> : null}
     </View>
   );
 }
@@ -1159,11 +1172,30 @@ const styles = StyleSheet.create({
   toolMutedSuffix: { color: palette.muted, fontWeight: "400" },
   toolErrorText: { color: palette.error, fontWeight: "800" },
   toolSection: { gap: 6, marginTop: 10 },
+  toolSectionHeader: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 6,
+    paddingVertical: 2,
+  },
+  toolSectionChevron: {
+    ...monoText,
+    color: palette.accent,
+    fontSize: 12,
+    fontWeight: "800",
+    minWidth: 12,
+  },
   toolSectionLabel: {
     ...monoText,
     color: palette.muted,
     fontSize: 12,
     fontWeight: "800",
+  },
+  toolSectionHint: {
+    ...monoText,
+    color: palette.dim,
+    fontSize: 11,
   },
   toolCodeBlock: {
     backgroundColor: palette.bodyBg,
