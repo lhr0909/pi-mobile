@@ -1,0 +1,110 @@
+import { describe, expect, it } from "vitest";
+import type { SessionSummary } from "@pi-mobile/shared";
+import {
+  CLIENT_HISTORY_LIMIT,
+  CLIENT_HISTORY_STORAGE_KEY,
+  emptyClientHistory,
+  loadClientHistory,
+  normalizeHistoryHostUrl,
+  rememberHost,
+  rememberSession,
+  saveClientHistory,
+  type ClientHistoryStorage,
+} from "../src/client-history.js";
+
+class MemoryStorage implements ClientHistoryStorage {
+  readonly values = new Map<string, string>();
+
+  async getItem(key: string): Promise<string | null> {
+    return this.values.get(key) ?? null;
+  }
+
+  async setItem(key: string, value: string): Promise<void> {
+    this.values.set(key, value);
+  }
+}
+
+const baseSession: SessionSummary = {
+  id: "s1",
+  cwd: "/tmp/project",
+  title: "Project",
+  sessionFile: "/tmp/session.jsonl",
+  runState: "idle",
+  messageCount: 2,
+  updatedAt: "2026-05-16T00:00:00.000Z",
+};
+
+describe("client history", () => {
+  it("normalizes host URLs for history keys", () => {
+    expect(normalizeHistoryHostUrl(" http://mac.local:4739/ ")).toBe("http://mac.local:4739");
+    expect(() => normalizeHistoryHostUrl(" ")).toThrow("Host URL is required");
+  });
+
+  it("remembers recent hosts with newest first and no duplicates", () => {
+    const first = rememberHost(emptyClientHistory(), "http://mac.local:4739/", "2026-05-16T00:00:00.000Z");
+    const second = rememberHost(first, "http://office.local:4739", "2026-05-16T00:01:00.000Z");
+    const repeated = rememberHost(second, "http://mac.local:4739", "2026-05-16T00:02:00.000Z");
+
+    expect(repeated.hosts.map(host => host.hostUrl)).toEqual([
+      "http://mac.local:4739",
+      "http://office.local:4739",
+    ]);
+    expect(repeated.hosts[0]?.lastConnectedAt).toBe("2026-05-16T00:02:00.000Z");
+  });
+
+  it("remembers recent sessions by host path and session id", () => {
+    const history = rememberSession(emptyClientHistory(), "http://mac.local:4739/", baseSession, "2026-05-16T00:00:00.000Z");
+    const updated = rememberSession(
+      history,
+      "http://mac.local:4739",
+      { ...baseSession, title: "Renamed" },
+      "2026-05-16T00:01:00.000Z",
+    );
+
+    expect(updated.sessions).toEqual([
+      {
+        hostUrl: "http://mac.local:4739",
+        cwd: "/tmp/project",
+        sessionId: "s1",
+        title: "Renamed",
+        sessionFile: "/tmp/session.jsonl",
+        lastOpenedAt: "2026-05-16T00:01:00.000Z",
+      },
+    ]);
+    expect(updated.hosts[0]?.hostUrl).toBe("http://mac.local:4739");
+  });
+
+  it("limits stored hosts and sessions", () => {
+    let history = emptyClientHistory();
+    for (let index = 0; index < CLIENT_HISTORY_LIMIT + 2; index += 1) {
+      history = rememberSession(
+        history,
+        `http://host-${index}.local:4739`,
+        { ...baseSession, id: `s${index}`, cwd: `/tmp/project-${index}` },
+        `2026-05-16T00:${String(index).padStart(2, "0")}:00.000Z`,
+      );
+    }
+
+    expect(history.hosts).toHaveLength(CLIENT_HISTORY_LIMIT);
+    expect(history.sessions).toHaveLength(CLIENT_HISTORY_LIMIT);
+    expect(history.hosts[0]?.hostUrl).toBe("http://host-9.local:4739");
+    expect(history.sessions[0]?.sessionId).toBe("s9");
+  });
+
+  it("loads empty history for missing or malformed storage", async () => {
+    const storage = new MemoryStorage();
+    await expect(loadClientHistory(storage)).resolves.toEqual(emptyClientHistory());
+
+    storage.values.set(CLIENT_HISTORY_STORAGE_KEY, "not json");
+    await expect(loadClientHistory(storage)).resolves.toEqual(emptyClientHistory());
+  });
+
+  it("round-trips history through storage", async () => {
+    const storage = new MemoryStorage();
+    const history = rememberSession(emptyClientHistory(), "http://mac.local:4739", baseSession, "2026-05-16T00:00:00.000Z");
+
+    await saveClientHistory(storage, history);
+
+    await expect(loadClientHistory(storage)).resolves.toEqual(history);
+  });
+});
