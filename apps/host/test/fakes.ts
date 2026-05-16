@@ -58,15 +58,22 @@ export class FakeRuntime implements MobileAgentRuntime {
   async dispose(): Promise<void> {}
 }
 
+interface FakeRuntimeFactoryOptions {
+  messages?: readonly unknown[];
+}
+
 export class FakeRuntimeFactory implements RuntimeFactory {
   readonly created: FakeSession[] = [];
   readonly listedCwds: Array<string | undefined> = [];
   readonly runtimeRequests: OpenSessionRequest[] = [];
 
+  constructor(private readonly options: FakeRuntimeFactoryOptions = {}) {}
+
   async createRuntime(request: OpenSessionRequest): Promise<MobileAgentRuntime> {
     this.runtimeRequests.push(request);
     const session = new FakeSession(`session-${this.created.length + 1}`, request.cwd);
     session.sessionFile = request.sessionFile;
+    session.messages = this.options.messages ?? [];
     this.created.push(session);
     return new FakeRuntime(session, request.cwd);
   }

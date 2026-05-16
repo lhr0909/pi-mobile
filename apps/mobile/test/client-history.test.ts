@@ -52,12 +52,12 @@ describe("client history", () => {
     expect(repeated.hosts[0]?.lastConnectedAt).toBe("2026-05-16T00:02:00.000Z");
   });
 
-  it("remembers recent sessions by host path and session id", () => {
+  it("remembers only the latest recent session for each host path", () => {
     const history = rememberSession(emptyClientHistory(), "http://mac.local:4739/", baseSession, "2026-05-16T00:00:00.000Z");
     const updated = rememberSession(
       history,
       "http://mac.local:4739",
-      { ...baseSession, title: "Renamed" },
+      { ...baseSession, id: "s2", title: "Renamed", sessionFile: "/tmp/session-2.jsonl" },
       "2026-05-16T00:01:00.000Z",
     );
 
@@ -65,13 +65,52 @@ describe("client history", () => {
       {
         hostUrl: "http://mac.local:4739",
         cwd: "/tmp/project",
-        sessionId: "s1",
+        sessionId: "s2",
         title: "Renamed",
-        sessionFile: "/tmp/session.jsonl",
+        sessionFile: "/tmp/session-2.jsonl",
         lastOpenedAt: "2026-05-16T00:01:00.000Z",
       },
     ]);
     expect(updated.hosts[0]?.hostUrl).toBe("http://mac.local:4739");
+  });
+
+  it("deduplicates loaded recent sessions by host path", async () => {
+    const storage = new MemoryStorage();
+    storage.values.set(
+      CLIENT_HISTORY_STORAGE_KEY,
+      JSON.stringify({
+        hosts: [],
+        sessions: [
+          {
+            hostUrl: "http://mac.local:4739",
+            cwd: "/tmp/project",
+            sessionId: "newer",
+            title: "Project",
+            sessionFile: "/tmp/newer.jsonl",
+            lastOpenedAt: "2026-05-16T00:02:00.000Z",
+          },
+          {
+            hostUrl: "http://mac.local:4739/",
+            cwd: "/tmp/project",
+            sessionId: "older",
+            title: "Project",
+            sessionFile: "/tmp/older.jsonl",
+            lastOpenedAt: "2026-05-16T00:01:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    await expect(loadClientHistory(storage)).resolves.toMatchObject({
+      sessions: [
+        {
+          hostUrl: "http://mac.local:4739",
+          cwd: "/tmp/project",
+          sessionId: "newer",
+          sessionFile: "/tmp/newer.jsonl",
+        },
+      ],
+    });
   });
 
   it("limits stored hosts and sessions", () => {

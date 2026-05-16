@@ -80,7 +80,7 @@ export function rememberSession(
     hosts: withHost.hosts,
     sessions: [
       nextSession,
-      ...history.sessions.filter(session => sessionKey(session) !== sessionKey(nextSession)),
+      ...history.sessions.filter(session => sessionPathKey(session) !== sessionPathKey(nextSession)),
     ].slice(0, CLIENT_HISTORY_LIMIT),
   };
 }
@@ -100,7 +100,7 @@ function parseClientHistory(input: unknown): ClientHistory {
 
   return {
     hosts: parseArray(input.hosts, parseRecentHost),
-    sessions: parseArray(input.sessions, parseRecentSession),
+    sessions: uniqueBy(parseArray(input.sessions, parseRecentSession), sessionPathKey),
   };
 }
 
@@ -146,8 +146,20 @@ function parseRecentSession(input: unknown): RecentSession | undefined {
   };
 }
 
-function sessionKey(session: Pick<RecentSession, "hostUrl" | "cwd" | "sessionId">): string {
-  return `${session.hostUrl}\u0000${session.cwd}\u0000${session.sessionId}`;
+function uniqueBy<T>(items: T[], keyForItem: (item: T) => string): T[] {
+  const seenKeys = new Set<string>();
+  return items.filter(item => {
+    const key = keyForItem(item);
+    if (seenKeys.has(key)) {
+      return false;
+    }
+    seenKeys.add(key);
+    return true;
+  });
+}
+
+function sessionPathKey(session: Pick<RecentSession, "hostUrl" | "cwd">): string {
+  return `${session.hostUrl}\u0000${session.cwd}`;
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {
