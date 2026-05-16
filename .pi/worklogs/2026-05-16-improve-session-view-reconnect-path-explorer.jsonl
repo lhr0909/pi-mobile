@@ -40,3 +40,8 @@
 {"type":"observation_added","observationId":"observation-17","source":"pnpm --filter @pi-mobile/app test -- --runInBand","observation":"Mobile tests pass after adding client-history helpers: 5 files, 30 tests.","createdAt":"2026-05-16T04:12:30.821Z"}
 {"type":"task_finished","taskId":"task-4","finishedAt":"2026-05-16T04:12:33.737Z"}
 {"type":"task_log_added","logId":"log-8","taskId":"task-4","content":"Added AsyncStorage dependency and a pure client-history module for loading/saving recent host and session history. History normalizes host URLs, dedupes by host or host/cwd/sessionId, saves sessionFile when available, and limits entries to eight. Added tests for normalization, dedupe, limits, malformed storage, and round-trip persistence.","createdAt":"2026-05-16T04:12:33.737Z"}
+{"type":"task_started","taskId":"task-5","startedAt":"2026-05-16T04:12:40.856Z"}
+{"type":"task_log_added","logId":"log-9","taskId":"task-5","content":"Starting HostClient updates for directory browsing and previous-session reopening support from the mobile UI.","createdAt":"2026-05-16T04:12:40.856Z"}
+{"type":"observation_added","observationId":"observation-18","source":"pnpm --filter @pi-mobile/app test -- --runInBand","observation":"Mobile tests pass after adding HostClient.listDirectories(): 5 files, 31 tests.","createdAt":"2026-05-16T04:13:03.803Z"}
+{"type":"task_finished","taskId":"task-5","finishedAt":"2026-05-16T04:13:06.761Z"}
+{"type":"task_log_added","logId":"log-10","taskId":"task-5","content":"Added HostClient.listDirectories(path='~') with URL encoding and a mobile unit test covering the request URL/response parsing.","createdAt":"2026-05-16T04:13:06.761Z"}

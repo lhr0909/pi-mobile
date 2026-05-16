@@ -55,6 +55,29 @@ describe("HostClient", () => {
     });
   });
 
+  it("lists host directories", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          path: "/Users/simon",
+          parentPath: "/Users",
+          entries: [{ name: "project", path: "/Users/simon/project" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const client = new HostClient({ baseUrl: "http://host.test" });
+
+    await expect(client.listDirectories("~/code projects")).resolves.toMatchObject({
+      path: "/Users/simon",
+      entries: [{ name: "project" }],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://host.test/api/directories?path=~%2Fcode%20projects",
+      { headers: {} },
+    );
+  });
+
   it("opens sessions and sends prompt commands", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
