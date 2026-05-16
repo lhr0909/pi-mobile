@@ -29,6 +29,66 @@ describe("SdkSessionRunner", () => {
     );
   });
 
+  it("restores timeline from existing SDK messages when opening a stored session", async () => {
+    const timestamp = Date.parse("2026-05-15T00:00:00.000Z");
+    const factory = new FakeRuntimeFactory({
+      messages: [
+        { role: "user", content: "What changed?", timestamp },
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Checking the diff" },
+            { type: "text", text: "I updated the client." },
+            { type: "toolCall", id: "call-1", name: "bash", arguments: { command: "git status --short" } },
+          ],
+          stopReason: "toolUse",
+          timestamp: timestamp + 1_000,
+        },
+        {
+          role: "toolResult",
+          toolCallId: "call-1",
+          toolName: "bash",
+          content: [{ type: "text", text: " M apps/host/src/session-runner.ts" }],
+          details: {},
+          isError: false,
+          timestamp: timestamp + 2_000,
+        },
+      ],
+    });
+
+    const runner = await SdkSessionRunner.open(
+      factory,
+      { cwd: "/tmp/project", sessionFile: "/tmp/session.jsonl", mode: "open" },
+      () => {},
+    );
+
+    expect(runner.snapshot().timeline).toEqual([
+      expect.objectContaining({
+        kind: "user",
+        text: "What changed?",
+        createdAt: "2026-05-15T00:00:00.000Z",
+      }),
+      expect.objectContaining({
+        kind: "thinking",
+        text: "Checking the diff",
+        createdAt: "2026-05-15T00:00:01.000Z",
+      }),
+      expect.objectContaining({
+        kind: "assistant",
+        text: "I updated the client.",
+        createdAt: "2026-05-15T00:00:01.000Z",
+      }),
+      expect.objectContaining({
+        kind: "tool",
+        title: "bash",
+        status: "done",
+        args: { command: "git status --short" },
+        detail: " M apps/host/src/session-runner.ts",
+        createdAt: "2026-05-15T00:00:01.000Z",
+      }),
+    ]);
+  });
+
   it("keeps one expanded tool item in snapshots after start and end events", async () => {
     const factory = new FakeRuntimeFactory();
     const runner = await SdkSessionRunner.open(factory, { cwd: "/tmp/project" }, () => {});

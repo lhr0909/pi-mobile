@@ -11,6 +11,7 @@ import {
   type TimelineItem,
 } from "@pi-mobile/shared";
 import { EventLog } from "./event-log.js";
+import { restoreTimelineFromMessages } from "./message-timeline.js";
 import { MobileExtensionUiBridge } from "./mobile-ui-context.js";
 import type { HostEventListener, MobileAgentRuntime, MobileAgentSession, RuntimeFactory, SessionRunner } from "./types.js";
 
@@ -119,6 +120,7 @@ export class SdkSessionRunner implements SessionRunner {
     this.unsubscribe?.();
     this.session = this.runtime.session;
     this._state = this.createState(this.session);
+    this.restoreTimelineFromSession();
     await this.session.bindExtensions({
       uiContext: this.uiBridge.createContext(),
       commandContextActions: {
@@ -132,6 +134,10 @@ export class SdkSessionRunner implements SessionRunner {
       },
     });
     this.unsubscribe = this.session.subscribe(event => this.handleSessionEvent(event));
+  }
+
+  private restoreTimelineFromSession(): void {
+    this.timeline.splice(0, this.timeline.length, ...restoreTimelineFromMessages(this.session.messages));
   }
 
   private async sessionPromptIdle(): Promise<void> {
