@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useReducer,
@@ -8,6 +9,7 @@ import {
 } from "react";
 import {
   FlatList,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   SafeAreaView,
@@ -15,6 +17,8 @@ import {
   Text,
   TextInput,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import CodeHighlighter, { type ReactStyle } from "react-native-code-highlighter";
 import Markdown from "react-native-markdown-display";
@@ -30,6 +34,10 @@ import {
   type AppViewState,
 } from "./src/app-view-model";
 import { HostClient } from "./src/host-client";
+import {
+  nextPinnedToBottom,
+  type TimelineScrollMetrics,
+} from "./src/timeline-scroll";
 import {
   formatJson,
   getBashCallParts,
@@ -47,6 +55,7 @@ const MONO_FONT =
     android: "monospace",
     default: "monospace",
   }) ?? "monospace";
+const SESSION_KEYBOARD_BEHAVIOR = Platform.OS === "ios" ? "padding" : "height";
 
 export default function App() {
   const [state, dispatch] = useReducer(
@@ -278,80 +287,184 @@ function SessionScreen({
   onAbort,
   onPromptChange,
 }: SessionScreenProps) {
-  return (
-    <View style={styles.sessionScreen}>
-      <View style={styles.sessionHeader}>
-        <View style={styles.headerTopRow}>
-          <Text style={styles.sessionTitle}>
-            Session: {shortSessionId(snapshot.session.id)}
-          </Text>
-          <View style={styles.headerActions}>
-            <PiButton
-              accessibilityLabel="Toggle Session Header"
-              label={state.sessionHeaderCollapsed ? "Show" : "Hide"}
-              onPress={onToggleHeader}
-              variant="ghost"
-            />
-            <PiButton
-              accessibilityLabel="Connection"
-              label="Host"
-              onPress={onShowConnection}
-              variant="ghost"
-            />
-          </View>
-        </View>
-        {state.sessionHeaderCollapsed ? (
-          <Text numberOfLines={1} style={styles.collapsedHeaderSummary}>
-            {snapshot.session.cwd}
-          </Text>
-        ) : (
-          <>
-            <InfoRow label="Path" value={snapshot.session.cwd} />
-            <InfoRow label="State" value={snapshot.session.runState} />
-            <InfoRow
-              label="Messages"
-              value={String(snapshot.session.messageCount)}
-            />
-            {snapshot.session.thinkingLevel ? (
-              <InfoRow
-                label="Thinking"
-                value={snapshot.session.thinkingLevel}
-              />
-            ) : null}
-            {snapshot.session.model ? (
-              <InfoRow
-                label="Model"
-                value={formatModel(snapshot.session.model)}
-              />
-            ) : null}
-          </>
-        )}
-      </View>
+  const timelineRef = useRef<FlatList<TimelineItem>>(null);
+  const userScrollActiveRef = useRef(false);
+  const [timelinePinnedToBottom, setTimelinePinnedToBottom] = useState(true);
+  const working = isWorking(snapshot.session.runState);
 
-      <FlatList
-        data={snapshot.timeline}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <TimelineRow item={item} />}
-        ListEmptyComponent={
-          <Text style={styles.empty}>Send a prompt to start the timeline.</Text>
-        }
-        contentContainerStyle={styles.timelineContent}
-        style={styles.timeline}
-      />
+  const scrollTimelineToEnd = useCallback((animated: boolean) => {
+    requestAnimationFrame(() => {
+      timelineRef.current?.scrollToEnd({ animated });
+    });
+  }, []);
 
-      {isWorking(snapshot.session.runState) ? <WorkingIndicator /> : null}
+  const keepTimelineAtBottom = useCallback(() => {
+    if (timelinePinnedToBottom) {
+      scrollTimelineToEnd(false);
+    }
+  }, [scrollTimelineToEnd, timelinePinnedToBottom]);
 
-      <Composer
-        cwd={snapshot.session.cwd}
-        onAbort={onAbort}
-        onFollowUp={onFollowUp}
-        onPromptChange={onPromptChange}
-        onSendPrompt={onSendPrompt}
-        onSteer={onSteer}
-        prompt={state.prompt}
-      />
-    </View>
+  useEffect(() => {
+    keepTimelineAtBottom();
+  }, [keepTimelineAtBottom, snapshot.timeline, working]);
+
+  const updateTimelinePin = useCallback(
+    (
+      event: NativeSyntheticEvent<NativeScrollEvent>,
+      userScrollActive: boolean,
+    ) => {
+      const metrics = timelineScrollMetricsFromEvent(event);
+      setTimelinePinnedToBottom((current) =>
+        nextPinnedToBottom(current, metrics, userScrollActive),
+      );
+    },
+    [],
   );
+
+  const handleTimelineScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      updateTimelinePin(event, userScrollActiveRef.current);
+    },
+    [updateTimelinePin],
+  );
+
+  const handleTimelineScrollBeginDrag = useCallback(() => {
+    userScrollActiveRef.current = true;
+  }, []);
+
+  const handleTimelineScrollEndDrag = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      updateTimelinePin(event, true);
+      userScrollActiveRef.current = false;
+    },
+    [updateTimelinePin],
+  );
+
+  const handleTimelineMomentumEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      updateTimelinePin(event, false);
+      userScrollActiveRef.current = false;
+    },
+    [updateTimelinePin],
+  );
+
+  const pinTimelineToBottom = useCallback(() => {
+    userScrollActiveRef.current = false;
+    setTimelinePinnedToBottom(true);
+    scrollTimelineToEnd(true);
+  }, [scrollTimelineToEnd]);
+
+  return (
+    <KeyboardAvoidingView
+      behavior={SESSION_KEYBOARD_BEHAVIOR}
+      style={styles.sessionKeyboardView}
+    >
+      <View style={styles.sessionScreen}>
+        <View style={styles.sessionHeader}>
+          <View style={styles.headerTopRow}>
+            <Text style={styles.sessionTitle}>
+              Session: {shortSessionId(snapshot.session.id)}
+            </Text>
+            <View style={styles.headerActions}>
+              <PiButton
+                accessibilityLabel="Toggle Session Header"
+                label={state.sessionHeaderCollapsed ? "Show" : "Hide"}
+                onPress={onToggleHeader}
+                variant="ghost"
+              />
+              <PiButton
+                accessibilityLabel="Connection"
+                label="Host"
+                onPress={onShowConnection}
+                variant="ghost"
+              />
+            </View>
+          </View>
+          {state.sessionHeaderCollapsed ? (
+            <Text numberOfLines={1} style={styles.collapsedHeaderSummary}>
+              {snapshot.session.cwd}
+            </Text>
+          ) : (
+            <>
+              <InfoRow label="Path" value={snapshot.session.cwd} />
+              <InfoRow label="State" value={snapshot.session.runState} />
+              <InfoRow
+                label="Messages"
+                value={String(snapshot.session.messageCount)}
+              />
+              {snapshot.session.thinkingLevel ? (
+                <InfoRow
+                  label="Thinking"
+                  value={snapshot.session.thinkingLevel}
+                />
+              ) : null}
+              {snapshot.session.model ? (
+                <InfoRow
+                  label="Model"
+                  value={formatModel(snapshot.session.model)}
+                />
+              ) : null}
+            </>
+          )}
+        </View>
+
+        <View style={styles.timelineContainer}>
+          <FlatList
+            ref={timelineRef}
+            data={snapshot.timeline}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => <TimelineRow item={item} />}
+            ListEmptyComponent={
+              <Text style={styles.empty}>Send a prompt to start the timeline.</Text>
+            }
+            contentContainerStyle={styles.timelineContent}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => keepTimelineAtBottom()}
+            onLayout={() => keepTimelineAtBottom()}
+            onMomentumScrollEnd={handleTimelineMomentumEnd}
+            onScroll={handleTimelineScroll}
+            onScrollBeginDrag={handleTimelineScrollBeginDrag}
+            onScrollEndDrag={handleTimelineScrollEndDrag}
+            scrollEventThrottle={16}
+            style={styles.timeline}
+          />
+          {working && !timelinePinnedToBottom ? (
+            <Pressable
+              accessibilityLabel="Stick timeline to bottom"
+              accessibilityRole="button"
+              hitSlop={12}
+              onPress={pinTimelineToBottom}
+              style={styles.pinTimelineButton}
+            >
+              <Text style={styles.pinTimelineButtonText}>↓</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {working ? <WorkingIndicator /> : null}
+
+        <Composer
+          cwd={snapshot.session.cwd}
+          onAbort={onAbort}
+          onFollowUp={onFollowUp}
+          onPromptChange={onPromptChange}
+          onSendPrompt={onSendPrompt}
+          onSteer={onSteer}
+          prompt={state.prompt}
+        />
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+function timelineScrollMetricsFromEvent(
+  event: NativeSyntheticEvent<NativeScrollEvent>,
+): TimelineScrollMetrics {
+  return {
+    contentHeight: event.nativeEvent.contentSize.height,
+    layoutHeight: event.nativeEvent.layoutMeasurement.height,
+    offsetY: event.nativeEvent.contentOffset.y,
+  };
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -863,6 +976,7 @@ const piSyntaxStyle: ReactStyle = {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bodyBg },
+  sessionKeyboardView: { flex: 1 },
   connectionScreen: { flex: 1, padding: 18, gap: 18, justifyContent: "center" },
   brandHeader: { gap: 6 },
   appTitle: {
@@ -958,8 +1072,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  timelineContainer: { flex: 1 },
   timeline: { flex: 1 },
   timelineContent: { gap: 18, paddingVertical: 18 },
+  pinTimelineButton: {
+    alignItems: "center",
+    backgroundColor: palette.borderAccent,
+    borderColor: palette.bodyBg,
+    borderRadius: 18,
+    borderWidth: 1,
+    bottom: 14,
+    height: 36,
+    justifyContent: "center",
+    position: "absolute",
+    right: 8,
+    width: 36,
+  },
+  pinTimelineButtonText: {
+    ...monoText,
+    color: palette.bodyBg,
+    fontSize: 20,
+    fontWeight: "800",
+    lineHeight: 24,
+  },
   workingIndicator: {
     alignItems: "center",
     flexDirection: "row",
