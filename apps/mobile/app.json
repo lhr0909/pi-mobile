@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "Pi Mobile",
+    "name": "PiMobile",
     "slug": "pi-mobile",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "pimobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "works.earendil.pi.mobile",
+      "bundleIdentifier": "ai.botisan.PiMobile",
       "supportsTablet": true
     },
     "android": {
-      "package": "works.earendil.pi.mobile"
+      "package": "ai.botisan.PiMobile"
     },
     "extra": {
       "defaultHostUrl": "http://localhost:4739"
