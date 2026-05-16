@@ -1,8 +1,9 @@
-import type { HostEvent, JsonObject, JsonValue, SessionState, TimelineItem } from "./protocol.js";
+import type { HostEvent, JsonObject, JsonValue, SessionState, TimelineItem, ToolItem } from "./protocol.js";
 
 export interface TimelineProjectionState {
   activeAssistantItemIds: Record<string, string>;
   activeThinkingItemIds: Record<string, string>;
+  activeToolItems: Record<string, ToolItem>;
   nextSyntheticId: number;
 }
 
@@ -14,7 +15,7 @@ export interface ProjectionInput {
 }
 
 export function createTimelineProjectionState(): TimelineProjectionState {
-  return { activeAssistantItemIds: {}, activeThinkingItemIds: {}, nextSyntheticId: 1 };
+  return { activeAssistantItemIds: {}, activeThinkingItemIds: {}, activeToolItems: {}, nextSyntheticId: 1 };
 }
 
 export function projectPiEvent(
@@ -175,17 +176,22 @@ function toolItem(
   status: "running" | "done" | "error",
   createdAt: string,
 ): TimelineItem {
-  const title = asString(event.toolName) ?? asString(event.name) ?? "tool";
-  const detail = toolDetail(event);
-  return {
-    id: asString(event.toolCallId) ?? syntheticId(state, "tool"),
+  const id = asString(event.toolCallId) ?? syntheticId(state, "tool");
+  const previous = state.activeToolItems[id];
+  const title = asString(event.toolName) ?? asString(event.name) ?? previous?.title ?? "tool";
+  const args = event.args === undefined ? previous?.args : event.args;
+  const detail = toolDetail(event) ?? previous?.detail;
+  const item: ToolItem = {
+    id,
     kind: "tool",
     title,
     status,
-    createdAt,
-    ...(event.args === undefined ? {} : { args: event.args }),
+    createdAt: previous?.createdAt ?? createdAt,
+    ...(args === undefined ? {} : { args }),
     ...(detail ? { detail } : {}),
   };
+  state.activeToolItems[id] = item;
+  return item;
 }
 
 function messageRole(event: JsonObject): string | undefined {

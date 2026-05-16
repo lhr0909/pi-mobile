@@ -172,6 +172,51 @@ describe("timeline projection", () => {
     ]);
   });
 
+  it("preserves tool arguments when completion events omit them", () => {
+    const state = createTimelineProjectionState();
+
+    projectPiEvent(state, {
+      sessionId: "s1",
+      seq: 10,
+      now: new Date("2026-05-15T00:00:10.000Z"),
+      event: {
+        type: "tool_execution_start",
+        toolCallId: "tool-1",
+        toolName: "read",
+        args: { path: "apps/mobile/App.tsx", offset: 260, limit: 360 },
+      },
+    });
+    const events = projectPiEvent(state, {
+      sessionId: "s1",
+      seq: 11,
+      now: new Date("2026-05-15T00:00:11.000Z"),
+      event: {
+        type: "tool_execution_end",
+        toolCallId: "tool-1",
+        toolName: "read",
+        isError: false,
+        result: { content: [{ type: "text", text: "function InfoRow() {}" }], details: {} },
+      },
+    });
+
+    expect(events).toEqual([
+      {
+        type: "timeline_item",
+        sessionId: "s1",
+        seq: 11,
+        item: {
+          id: "tool-1",
+          kind: "tool",
+          title: "read",
+          status: "done",
+          args: { path: "apps/mobile/App.tsx", offset: 260, limit: 360 },
+          detail: "function InfoRow() {}",
+          createdAt: "2026-05-15T00:00:10.000Z",
+        },
+      },
+    ]);
+  });
+
   it("does not emit timeline status prompts for agent lifecycle", () => {
     const state = createTimelineProjectionState();
 
