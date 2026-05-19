@@ -28,16 +28,19 @@ import type {
   DirectoryList,
   JsonValue,
   SessionSnapshot,
+  SessionSummary,
   TimelineItem,
 } from "@pi-mobile/shared";
 import {
   createInitialAppViewState,
-  isAbsoluteHostPath,
+  isHostWorkspacePath,
   reduceAppViewState,
   type AppViewState,
 } from "./src/app-view-model";
 import {
   emptyClientHistory,
+  forgetHost,
+  forgetSession,
   loadClientHistory,
   normalizeHistoryHostUrl,
   rememberHost,
@@ -63,6 +66,9 @@ import {
 } from "./src/tool-rendering";
 
 const DEFAULT_HOST_URL = "http://localhost:4739";
+const HOME_DIRECTORY_PATH = "~";
+const DOCUMENTS_DIRECTORY_PATH = "~/Documents";
+const DEFAULT_DIRECTORY_PATH = DOCUMENTS_DIRECTORY_PATH;
 const MONO_FONT =
   Platform.select({
     ios: "Menlo",
@@ -80,6 +86,10 @@ export default function App() {
   const [directoryList, setDirectoryList] = useState<DirectoryList | undefined>();
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | undefined>();
+  const [pathSessions, setPathSessions] = useState<SessionSummary[]>([]);
+  const [pathSessionsPath, setPathSessionsPath] = useState<string | undefined>();
+  const [pathSessionsLoading, setPathSessionsLoading] = useState(false);
+  const [pathSessionsError, setPathSessionsError] = useState<string | undefined>();
   const historyRef = useRef(history);
   const socketRef = useRef<WebSocket | null>(null);
   const client = useMemo(
@@ -117,12 +127,35 @@ export default function App() {
     });
   };
 
-  const browseDirectories = async (directoryClient: HostClient, directoryPath = "~") => {
+  const browseSessionsForPath = async (sessionClient: HostClient, cwd: string) => {
+    const path = cwd.trim();
+    if (!path) {
+      return [];
+    }
+
+    setPathSessionsLoading(true);
+    setPathSessionsError(undefined);
+    setPathSessionsPath(path);
+    try {
+      const sessions = await sessionClient.listSessions(path);
+      setPathSessions(sessions);
+      return sessions;
+    } catch (error) {
+      setPathSessions([]);
+      setPathSessionsError(toErrorMessage(error));
+      return [];
+    } finally {
+      setPathSessionsLoading(false);
+    }
+  };
+
+  const browseDirectories = async (directoryClient: HostClient, directoryPath = DEFAULT_DIRECTORY_PATH) => {
     setDirectoryLoading(true);
     setDirectoryError(undefined);
     try {
       const nextDirectoryList = await directoryClient.listDirectories(directoryPath);
       setDirectoryList(nextDirectoryList);
+      void browseSessionsForPath(directoryClient, nextDirectoryList.path);
       return nextDirectoryList;
     } catch (error) {
       setDirectoryError(toErrorMessage(error));
@@ -134,6 +167,7 @@ export default function App() {
 
   const connectToHost = async (hostUrl: string): Promise<HostClient> => {
     const normalizedHostUrl = normalizeHistoryHostUrl(hostUrl);
+    const shouldSeedDefaultPath = !isHostWorkspacePath(state.cwd);
     const nextClient = createHostClient(normalizedHostUrl, state.token);
     dispatch({ type: "setHostUrl", value: normalizedHostUrl });
     dispatch({ type: "connecting" });
@@ -144,7 +178,10 @@ export default function App() {
     );
     dispatch({ type: "connected", status });
     persistHistory(rememberHost(historyRef.current, normalizedHostUrl));
-    await browseDirectories(nextClient);
+    const defaultDirectory = await browseDirectories(nextClient);
+    if (shouldSeedDefaultPath && defaultDirectory) {
+      dispatch({ type: "setCwd", value: defaultDirectory.path });
+    }
     return nextClient;
   };
 
@@ -158,6 +195,14 @@ export default function App() {
 
   const rememberOpenedSession = (hostUrl: string, snapshot: SessionSnapshot) => {
     persistHistory(rememberSession(historyRef.current, hostUrl, snapshot.session));
+  };
+
+  const deleteRecentHost = (host: RecentHost) => {
+    persistHistory(forgetHost(historyRef.current, host.hostUrl));
+  };
+
+  const deleteRecentSession = (session: RecentSession) => {
+    persistHistory(forgetSession(historyRef.current, session));
   };
 
   const openNewSession = async (sessionClient: HostClient, hostUrl: string, cwd: string) => {
@@ -205,6 +250,27 @@ export default function App() {
     }
   };
 
+  const openListedSession = async (session: SessionSummary) => {
+    try {
+      if (!session.sessionFile) {
+        throw new Error("Stored session file is missing");
+      }
+      const snapshot = await client.openSession({
+        cwd: session.cwd,
+        sessionFile: session.sessionFile,
+        mode: "open",
+      });
+      dispatch({ type: "hostEvent", event: { type: "session_opened", snapshot } });
+      rememberOpenedSession(normalizeHistoryHostUrl(state.hostUrl), snapshot);
+    } catch (error) {
+      dispatch({ type: "setError", message: toErrorMessage(error) });
+    }
+  };
+
+  const browseSessionsForSelectedPath = async () => {
+    await browseSessionsForPath(client, state.cwd);
+  };
+
   const selectExplorerPath = () => {
     if (directoryList) {
       dispatch({ type: "setCwd", value: directoryList.path });
@@ -244,14 +310,22 @@ export default function App() {
           directoryList={directoryList}
           directoryLoading={directoryLoading}
           history={history}
+          pathSessions={pathSessions}
+          pathSessionsError={pathSessionsError}
+          pathSessionsLoading={pathSessionsLoading}
+          pathSessionsPath={pathSessionsPath}
           state={state}
           onBrowseDirectory={(path) => void browseDirectories(client, path)}
+          onBrowseSessions={() => void browseSessionsForSelectedPath()}
           onConnect={connect}
           onConnectRecentHost={(host) => void connectToHost(host.hostUrl).catch((error) => {
             dispatch({ type: "disconnected", errorMessage: toErrorMessage(error) });
           })}
           onCwdChange={(value) => dispatch({ type: "setCwd", value })}
+          onDeleteRecentHost={deleteRecentHost}
+          onDeleteRecentSession={deleteRecentSession}
           onHostUrlChange={(value) => dispatch({ type: "setHostUrl", value })}
+          onOpenListedSession={(session) => void openListedSession(session)}
           onOpenNewSessionFromHistory={(session) => void openNewSessionFromHistory(session)}
           onOpenPreviousSession={(session) => void openPreviousSession(session)}
           onOpenSession={openSession}
@@ -297,15 +371,23 @@ interface ConnectionScreenProps {
   directoryList: DirectoryList | undefined;
   directoryLoading: boolean;
   directoryError: string | undefined;
+  pathSessions: SessionSummary[];
+  pathSessionsPath: string | undefined;
+  pathSessionsLoading: boolean;
+  pathSessionsError: string | undefined;
   onConnect: () => void;
   onConnectRecentHost: (host: RecentHost) => void;
+  onDeleteRecentHost: (host: RecentHost) => void;
+  onDeleteRecentSession: (session: RecentSession) => void;
   onOpenSession: () => void;
+  onOpenListedSession: (session: SessionSummary) => void;
   onOpenPreviousSession: (session: RecentSession) => void;
   onOpenNewSessionFromHistory: (session: RecentSession) => void;
   onHostUrlChange: (value: string) => void;
   onTokenChange: (value: string) => void;
   onCwdChange: (value: string) => void;
   onBrowseDirectory: (path: string) => void;
+  onBrowseSessions: () => void;
   onSelectExplorerPath: () => void;
 }
 
@@ -315,23 +397,39 @@ function ConnectionScreen({
   directoryList,
   directoryLoading,
   directoryError,
+  pathSessions,
+  pathSessionsPath,
+  pathSessionsLoading,
+  pathSessionsError,
   onConnect,
   onConnectRecentHost,
+  onDeleteRecentHost,
+  onDeleteRecentSession,
   onOpenSession,
+  onOpenListedSession,
   onOpenPreviousSession,
   onOpenNewSessionFromHistory,
   onHostUrlChange,
   onTokenChange,
   onCwdChange,
   onBrowseDirectory,
+  onBrowseSessions,
   onSelectExplorerPath,
 }: ConnectionScreenProps) {
-  const pathIsAbsolute =
-    state.cwd.trim().length === 0 || isAbsoluteHostPath(state.cwd);
+  const hasHistory = history.hosts.length > 0 || history.sessions.length > 0;
+  const [setupExpanded, setSetupExpanded] = useState(!hasHistory);
+  useEffect(() => {
+    if (!hasHistory) {
+      setSetupExpanded(true);
+    }
+  }, [hasHistory]);
+
+  const pathIsOpenable =
+    state.cwd.trim().length === 0 || isHostWorkspacePath(state.cwd);
   const canOpenSession =
     state.connectionState === "connected" &&
     state.cwd.trim().length > 0 &&
-    pathIsAbsolute;
+    pathIsOpenable;
 
   return (
     <ScrollView
@@ -341,89 +439,132 @@ function ConnectionScreen({
     >
       <View style={styles.brandHeader}>
         <Text style={styles.appTitle}>Pi Mobile</Text>
-        <Text style={styles.helpText}>Quickly reconnect to your Pi hosts and sessions.</Text>
+        <Text style={styles.helpText}>Resume desktop and mobile Pi sessions from a phone-first home.</Text>
       </View>
 
-      <RecentHostsPanel hosts={history.hosts} onConnect={onConnectRecentHost} />
       <RecentSessionsPanel
         sessions={history.sessions}
+        onDelete={onDeleteRecentSession}
         onOpenNew={onOpenNewSessionFromHistory}
         onOpenPrevious={onOpenPreviousSession}
       />
-
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Connect to host</Text>
-        <Text style={styles.label}>Host URL</Text>
-        <TextInput
-          accessibilityLabel="Host URL"
-          autoCapitalize="none"
-          value={state.hostUrl}
-          onChangeText={onHostUrlChange}
-          style={styles.input}
-        />
-        <Text style={styles.label}>Bearer token (optional)</Text>
-        <TextInput
-          accessibilityLabel="Host Token"
-          autoCapitalize="none"
-          secureTextEntry
-          value={state.token}
-          onChangeText={onTokenChange}
-          style={styles.input}
-        />
-        <PiButton
-          accessibilityLabel="Connect"
-          disabled={state.connectionState === "connecting"}
-          label={
-            state.connectionState === "connecting"
-              ? "Connecting…"
-              : "Connect host"
-          }
-          onPress={onConnect}
-          variant="primary"
-        />
-        <Text style={styles.statusLine}>Status: {state.connectionState}</Text>
-        {state.client.connectionMessage ? (
-          <Text style={styles.dimLine}>{state.client.connectionMessage}</Text>
-        ) : null}
-        {state.errorMessage ? (
-          <Text style={styles.errorLine}>{state.errorMessage}</Text>
-        ) : null}
-      </View>
-
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Workspace</Text>
-        <Text style={styles.label}>Selected host path</Text>
-        <TextInput
-          accessibilityLabel="Session Path"
-          autoCapitalize="none"
-          placeholder="Connect, browse, or paste /absolute/path"
-          placeholderTextColor={palette.dim}
-          value={state.cwd}
-          onChangeText={onCwdChange}
-          style={styles.input}
-        />
-        <Text style={pathIsAbsolute ? styles.dimLine : styles.warningLine}>
-          {pathIsAbsolute
-            ? "Browse from ~ below, then use the current directory as the session path."
-            : "Use an absolute host path before opening a session."}
-        </Text>
-        <PiButton
-          accessibilityLabel="New Session"
-          disabled={!canOpenSession}
-          label="Open new session"
-          onPress={onOpenSession}
-          variant="secondary"
-        />
-      </View>
-
-      <PathExplorerPanel
-        connectionState={state.connectionState}
-        directoryError={directoryError}
-        directoryList={directoryList}
-        loading={directoryLoading}
-        onBrowseDirectory={onBrowseDirectory}
-        onSelectCurrentPath={onSelectExplorerPath}
+      <RecentHostsPanel
+        hosts={history.hosts}
+        onConnect={onConnectRecentHost}
+        onDelete={onDeleteRecentHost}
       />
+
+      {hasHistory ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Browse or add</Text>
+          <Text style={styles.dimLine}>
+            Connect to a host, pick a folder, or browse stored desktop sessions by path.
+          </Text>
+          <PiButton
+            accessibilityLabel="Toggle host setup"
+            label={setupExpanded ? "Hide host setup" : "Browse host/path"}
+            onPress={() => setSetupExpanded((expanded) => !expanded)}
+            variant="secondary"
+          />
+        </View>
+      ) : null}
+
+      {setupExpanded ? (
+        <>
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Connect to host</Text>
+            <Text style={styles.label}>Host URL</Text>
+            <TextInput
+              accessibilityLabel="Host URL"
+              autoCapitalize="none"
+              value={state.hostUrl}
+              onChangeText={onHostUrlChange}
+              style={styles.input}
+            />
+            <Text style={styles.label}>Bearer token (optional)</Text>
+            <TextInput
+              accessibilityLabel="Host Token"
+              autoCapitalize="none"
+              secureTextEntry
+              value={state.token}
+              onChangeText={onTokenChange}
+              style={styles.input}
+            />
+            <PiButton
+              accessibilityLabel="Connect"
+              disabled={state.connectionState === "connecting"}
+              label={
+                state.connectionState === "connecting"
+                  ? "Connecting…"
+                  : "Connect host"
+              }
+              onPress={onConnect}
+              variant="primary"
+            />
+            <Text style={styles.statusLine}>Status: {state.connectionState}</Text>
+            {state.client.connectionMessage ? (
+              <Text style={styles.dimLine}>{state.client.connectionMessage}</Text>
+            ) : null}
+            {state.errorMessage ? (
+              <Text style={styles.errorLine}>{state.errorMessage}</Text>
+            ) : null}
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Workspace</Text>
+            <Text style={styles.label}>Selected host path</Text>
+            <TextInput
+              accessibilityLabel="Session Path"
+              autoCapitalize="none"
+              placeholder="Connect, browse, or paste /absolute/path"
+              placeholderTextColor={palette.dim}
+              value={state.cwd}
+              onChangeText={onCwdChange}
+              style={styles.input}
+            />
+            <Text style={pathIsOpenable ? styles.dimLine : styles.warningLine}>
+              {pathIsOpenable
+                ? "Documents is the default. You can also paste an absolute or ~/ path."
+                : "Use an absolute or ~/ host path before opening a session."}
+            </Text>
+            <View style={styles.historyActions}>
+              <PiButton
+                accessibilityLabel="New Session"
+                disabled={!canOpenSession}
+                label="Open new session"
+                onPress={onOpenSession}
+                variant="secondary"
+              />
+              <PiButton
+                accessibilityLabel="Browse sessions for selected path"
+                disabled={state.connectionState !== "connected" || state.cwd.trim().length === 0 || pathSessionsLoading}
+                label={pathSessionsLoading ? "Loading…" : "Browse sessions"}
+                onPress={onBrowseSessions}
+                variant="ghost"
+              />
+            </View>
+          </View>
+
+          <PathExplorerPanel
+            connectionState={state.connectionState}
+            directoryError={directoryError}
+            directoryList={directoryList}
+            loading={directoryLoading}
+            onBrowseDirectory={onBrowseDirectory}
+            onSelectCurrentPath={onSelectExplorerPath}
+          />
+          <PathSessionsPanel
+            connectionState={state.connectionState}
+            path={state.cwd}
+            sessions={pathSessions}
+            sessionsError={pathSessionsError}
+            sessionsLoading={pathSessionsLoading}
+            sessionsPath={pathSessionsPath}
+            onBrowseSessions={onBrowseSessions}
+            onOpenSession={onOpenListedSession}
+          />
+        </>
+      ) : null}
     </ScrollView>
   );
 }
@@ -431,9 +572,11 @@ function ConnectionScreen({
 function RecentHostsPanel({
   hosts,
   onConnect,
+  onDelete,
 }: {
   hosts: RecentHost[];
   onConnect: (host: RecentHost) => void;
+  onDelete: (host: RecentHost) => void;
 }) {
   if (hosts.length === 0) {
     return null;
@@ -448,12 +591,20 @@ function RecentHostsPanel({
             <Text numberOfLines={1} style={styles.historyTitle}>{host.hostUrl}</Text>
             <Text style={styles.dimLine}>last connected {formatTime(host.lastConnectedAt)}</Text>
           </View>
-          <PiButton
-            accessibilityLabel={`Connect to ${host.hostUrl}`}
-            label="Connect"
-            onPress={() => onConnect(host)}
-            variant="ghost"
-          />
+          <View style={styles.historyActions}>
+            <PiButton
+              accessibilityLabel={`Connect to ${host.hostUrl}`}
+              label="Connect"
+              onPress={() => onConnect(host)}
+              variant="ghost"
+            />
+            <PiButton
+              accessibilityLabel={`Delete recent host ${host.hostUrl}`}
+              label="Delete"
+              onPress={() => onDelete(host)}
+              variant="danger"
+            />
+          </View>
         </View>
       ))}
     </View>
@@ -462,10 +613,12 @@ function RecentHostsPanel({
 
 function RecentSessionsPanel({
   sessions,
+  onDelete,
   onOpenNew,
   onOpenPrevious,
 }: {
   sessions: RecentSession[];
+  onDelete: (session: RecentSession) => void;
   onOpenNew: (session: RecentSession) => void;
   onOpenPrevious: (session: RecentSession) => void;
 }) {
@@ -496,6 +649,12 @@ function RecentSessionsPanel({
               onPress={() => onOpenNew(session)}
               variant="ghost"
             />
+            <PiButton
+              accessibilityLabel={`Delete recent session ${session.sessionId}`}
+              label="Delete"
+              onPress={() => onDelete(session)}
+              variant="danger"
+            />
           </View>
         </View>
       ))}
@@ -524,14 +683,21 @@ function PathExplorerPanel({
     <View style={styles.panel}>
       <Text style={styles.panelTitle}>Path explorer</Text>
       <Text numberOfLines={1} style={styles.pathExplorerCurrent}>
-        {directoryList?.path ?? "~"}
+        {directoryList?.path ?? DOCUMENTS_DIRECTORY_PATH}
       </Text>
       <View style={styles.historyActions}>
         <PiButton
           accessibilityLabel="Browse home directory"
           disabled={!connected || loading}
           label="Home ~"
-          onPress={() => onBrowseDirectory("~")}
+          onPress={() => onBrowseDirectory(HOME_DIRECTORY_PATH)}
+          variant="ghost"
+        />
+        <PiButton
+          accessibilityLabel="Browse documents directory"
+          disabled={!connected || loading}
+          label="Documents"
+          onPress={() => onBrowseDirectory(DOCUMENTS_DIRECTORY_PATH)}
           variant="ghost"
         />
         <PiButton
@@ -550,7 +716,7 @@ function PathExplorerPanel({
         />
       </View>
       {!connected ? (
-        <Text style={styles.dimLine}>Connect a host to browse directories from ~.</Text>
+        <Text style={styles.dimLine}>Connect a host to browse directories from ~/Documents.</Text>
       ) : null}
       {loading ? <Text style={styles.statusLine}>Loading directories…</Text> : null}
       {directoryError ? <Text style={styles.errorLine}>{directoryError}</Text> : null}
@@ -571,6 +737,78 @@ function PathExplorerPanel({
               </Pressable>
             ))
           )}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function PathSessionsPanel({
+  connectionState,
+  path,
+  sessions,
+  sessionsError,
+  sessionsLoading,
+  sessionsPath,
+  onBrowseSessions,
+  onOpenSession,
+}: {
+  connectionState: AppViewState["connectionState"];
+  path: string;
+  sessions: SessionSummary[];
+  sessionsError: string | undefined;
+  sessionsLoading: boolean;
+  sessionsPath: string | undefined;
+  onBrowseSessions: () => void;
+  onOpenSession: (session: SessionSummary) => void;
+}) {
+  const connected = connectionState === "connected";
+  const selectedPath = path.trim();
+  const canBrowse = connected && selectedPath.length > 0;
+  const displayedPath = (sessionsPath ?? selectedPath) || "Choose a path";
+  const showEmpty = connected && !sessionsLoading && !sessionsError && sessionsPath && sessions.length === 0;
+
+  return (
+    <View style={styles.panel}>
+      <Text style={styles.panelTitle}>Sessions for path</Text>
+      <Text numberOfLines={1} style={styles.pathExplorerCurrent}>{displayedPath}</Text>
+      <View style={styles.historyActions}>
+        <PiButton
+          accessibilityLabel="Refresh sessions for selected path"
+          disabled={!canBrowse || sessionsLoading}
+          label={sessionsLoading ? "Loading…" : "Refresh"}
+          onPress={onBrowseSessions}
+          variant="ghost"
+        />
+      </View>
+      {!connected ? (
+        <Text style={styles.dimLine}>Connect a host to browse stored sessions for a folder.</Text>
+      ) : null}
+      {connected && !selectedPath ? (
+        <Text style={styles.dimLine}>Choose or paste a workspace path, then refresh sessions.</Text>
+      ) : null}
+      {sessionsError ? <Text style={styles.errorLine}>{sessionsError}</Text> : null}
+      {showEmpty ? <Text style={styles.dimLine}>No stored sessions for this path.</Text> : null}
+      {sessions.length > 0 ? (
+        <View style={styles.directoryList}>
+          {sessions.map(session => (
+            <View key={session.sessionFile ?? session.id} style={styles.sessionHistoryRow}>
+              <Text numberOfLines={1} style={styles.historyTitle}>{session.title}</Text>
+              <Text numberOfLines={1} style={styles.dimLine}>{session.cwd}</Text>
+              <Text numberOfLines={1} style={styles.dimLine}>
+                {shortSessionId(session.id)} · {session.messageCount} messages · updated {formatTime(session.updatedAt)}
+              </Text>
+              <View style={styles.historyActions}>
+                <PiButton
+                  accessibilityLabel={`Continue stored session ${session.id}`}
+                  disabled={!session.sessionFile}
+                  label="Continue"
+                  onPress={() => onOpenSession(session)}
+                  variant="secondary"
+                />
+              </View>
+            </View>
+          ))}
         </View>
       ) : null}
     </View>
