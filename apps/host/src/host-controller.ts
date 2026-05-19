@@ -39,7 +39,7 @@ export class HostController {
 
   async listSessions(cwd?: string): Promise<SessionSummary[]> {
     const active = new Map([...this.runners.values()].map(runner => [runner.state.sessionFile, runner.state]));
-    const stored = await this.runtimeFactory.listSessions(cwd ? path.resolve(cwd) : undefined);
+    const stored = await this.runtimeFactory.listSessions(cwd ? resolveHostPath(cwd) : undefined);
     return stored.map(summary => {
       const activeState = active.get(summary.sessionFile);
       return activeState ?? summary;
@@ -121,8 +121,8 @@ export class HostController {
 function normalizeOpenSessionRequest(request: OpenSessionRequest): OpenSessionRequest {
   return {
     ...request,
-    cwd: path.resolve(request.cwd),
-    ...(request.sessionFile ? { sessionFile: path.resolve(request.sessionFile) } : {}),
+    cwd: resolveHostPath(request.cwd),
+    ...(request.sessionFile ? { sessionFile: resolveHostPath(request.sessionFile) } : {}),
   };
 }
 
