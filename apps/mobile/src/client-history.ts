@@ -85,6 +85,28 @@ export function rememberSession(
   };
 }
 
+export function forgetHost(history: ClientHistory, hostUrl: string): ClientHistory {
+  const normalizedHostUrl = normalizeHistoryHostUrl(hostUrl);
+  return {
+    hosts: history.hosts.filter(host => host.hostUrl !== normalizedHostUrl),
+    sessions: history.sessions.filter(session => session.hostUrl !== normalizedHostUrl),
+  };
+}
+
+export function forgetSession(
+  history: ClientHistory,
+  session: Pick<RecentSession, "hostUrl" | "cwd">,
+): ClientHistory {
+  const key = sessionPathKey({
+    hostUrl: normalizeHistoryHostUrl(session.hostUrl),
+    cwd: session.cwd,
+  });
+  return {
+    ...history,
+    sessions: history.sessions.filter(candidate => sessionPathKey(candidate) !== key),
+  };
+}
+
 export function normalizeHistoryHostUrl(input: string): string {
   const trimmed = input.trim();
   if (!trimmed) {

@@ -4,6 +4,8 @@ import {
   CLIENT_HISTORY_LIMIT,
   CLIENT_HISTORY_STORAGE_KEY,
   emptyClientHistory,
+  forgetHost,
+  forgetSession,
   loadClientHistory,
   normalizeHistoryHostUrl,
   rememberHost,
@@ -111,6 +113,40 @@ describe("client history", () => {
         },
       ],
     });
+  });
+
+  it("forgets recent hosts and their sessions", () => {
+    const macSession = rememberSession(
+      emptyClientHistory(),
+      "http://mac.local:4739/",
+      baseSession,
+      "2026-05-16T00:00:00.000Z",
+    );
+    const officeSession = rememberSession(
+      macSession,
+      "http://office.local:4739",
+      { ...baseSession, id: "office", cwd: "/tmp/office" },
+      "2026-05-16T00:01:00.000Z",
+    );
+
+    const updated = forgetHost(officeSession, "http://mac.local:4739/");
+
+    expect(updated.hosts.map(host => host.hostUrl)).toEqual(["http://office.local:4739"]);
+    expect(updated.sessions.map(session => session.hostUrl)).toEqual(["http://office.local:4739"]);
+  });
+
+  it("forgets individual recent sessions without removing the host", () => {
+    const history = rememberSession(
+      emptyClientHistory(),
+      "http://mac.local:4739/",
+      baseSession,
+      "2026-05-16T00:00:00.000Z",
+    );
+
+    const updated = forgetSession(history, { hostUrl: "http://mac.local:4739/", cwd: "/tmp/project" });
+
+    expect(updated.hosts.map(host => host.hostUrl)).toEqual(["http://mac.local:4739"]);
+    expect(updated.sessions).toEqual([]);
   });
 
   it("limits stored hosts and sessions", () => {
