@@ -26,7 +26,7 @@ The implementation follows the research decision: **SDK-hosted TypeScript daemon
 - iPhone-first MVP with separate connection and session screens.
 - Connects to a configured host URL and optional token.
 - Presents a recents-first mobile home for resuming sessions, connecting hosts, and opening the host/path browser only when needed.
-- Persists recent hosts and recent host/path/session combinations on the client for quick reconnects, with client-side delete actions for keeping the mobile home concise.
+- Persists recent hosts and recent host/path/session combinations on the client for quick reconnects, with client-side remove-from-recents actions for keeping the mobile home concise without deleting anything on the host machine.
 - Seeds directory browsing from `~/Documents` by default, includes quick Home (`~`) and Documents shortcuts, and supports `~/...` workspace paths.
 - Lists stored Pi sessions for the selected workspace path so desktop sessions can be continued from mobile.
 - Opens a new Pi session for the selected workspace path, opens a listed stored session, or reopens a previous persisted session when a saved session file is available, then switches into the session view.
@@ -107,7 +107,7 @@ The app defaults to `http://localhost:4739`, which works for an iOS simulator ta
 Flow:
 
 1. Open the mobile home.
-2. Resume from a saved session row, connect to a recent host row, or delete stale recent hosts/sessions from the client.
+2. Resume from a saved session row, connect to a recent host row, or remove stale recent host/session references from this client device.
 3. Tap **Browse host/path** when you need manual setup. Enter the host URL/token and tap **Connect host**. The app reads `/api/host/status`, remembers the host locally, and opens the path explorer at `~/Documents` unless you already entered an absolute or `~/...` path.
 4. Use the **Documents**, **Home ~**, and **Up** shortcuts or folder rows to browse, then tap **Use this path**.
 5. Tap **Browse sessions** / **Refresh** to list stored desktop/mobile Pi sessions for the selected path, then **Continue** a listed session, choose **New here** from recents, or tap **Open new session** for a fresh session.
@@ -186,7 +186,7 @@ If the simulator automation runner cannot interact with the app, capture a scree
 ## MVP limitations
 
 - No hosted relay yet; use direct LAN, localhost, Tailscale, or an SSH tunnel.
-- No QR pairing yet; recent hosts/sessions are saved and deleted locally on the mobile client only.
+- No QR pairing yet; recent hosts/sessions are saved locally on the mobile client only. Removing recents clears only the client-side reference records and never deletes host sessions, files, or directories.
 - No push notifications yet.
 - Mobile extension UI requests are emitted by the host, but the current app does not yet render response dialogs.
 - SDK host process owns active turns; a daemon crash ends in-flight work, while persisted Pi sessions can be reopened.

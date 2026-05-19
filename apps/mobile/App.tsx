@@ -197,11 +197,11 @@ export default function App() {
     persistHistory(rememberSession(historyRef.current, hostUrl, snapshot.session));
   };
 
-  const deleteRecentHost = (host: RecentHost) => {
+  const removeRecentHost = (host: RecentHost) => {
     persistHistory(forgetHost(historyRef.current, host.hostUrl));
   };
 
-  const deleteRecentSession = (session: RecentSession) => {
+  const removeRecentSession = (session: RecentSession) => {
     persistHistory(forgetSession(historyRef.current, session));
   };
 
@@ -322,8 +322,8 @@ export default function App() {
             dispatch({ type: "disconnected", errorMessage: toErrorMessage(error) });
           })}
           onCwdChange={(value) => dispatch({ type: "setCwd", value })}
-          onDeleteRecentHost={deleteRecentHost}
-          onDeleteRecentSession={deleteRecentSession}
+          onRemoveRecentHost={removeRecentHost}
+          onRemoveRecentSession={removeRecentSession}
           onHostUrlChange={(value) => dispatch({ type: "setHostUrl", value })}
           onOpenListedSession={(session) => void openListedSession(session)}
           onOpenNewSessionFromHistory={(session) => void openNewSessionFromHistory(session)}
@@ -377,8 +377,8 @@ interface ConnectionScreenProps {
   pathSessionsError: string | undefined;
   onConnect: () => void;
   onConnectRecentHost: (host: RecentHost) => void;
-  onDeleteRecentHost: (host: RecentHost) => void;
-  onDeleteRecentSession: (session: RecentSession) => void;
+  onRemoveRecentHost: (host: RecentHost) => void;
+  onRemoveRecentSession: (session: RecentSession) => void;
   onOpenSession: () => void;
   onOpenListedSession: (session: SessionSummary) => void;
   onOpenPreviousSession: (session: RecentSession) => void;
@@ -403,8 +403,8 @@ function ConnectionScreen({
   pathSessionsError,
   onConnect,
   onConnectRecentHost,
-  onDeleteRecentHost,
-  onDeleteRecentSession,
+  onRemoveRecentHost,
+  onRemoveRecentSession,
   onOpenSession,
   onOpenListedSession,
   onOpenPreviousSession,
@@ -444,14 +444,14 @@ function ConnectionScreen({
 
       <RecentSessionsPanel
         sessions={history.sessions}
-        onDelete={onDeleteRecentSession}
+        onRemove={onRemoveRecentSession}
         onOpenNew={onOpenNewSessionFromHistory}
         onOpenPrevious={onOpenPreviousSession}
       />
       <RecentHostsPanel
         hosts={history.hosts}
         onConnect={onConnectRecentHost}
-        onDelete={onDeleteRecentHost}
+        onRemove={onRemoveRecentHost}
       />
 
       {hasHistory ? (
@@ -572,11 +572,11 @@ function ConnectionScreen({
 function RecentHostsPanel({
   hosts,
   onConnect,
-  onDelete,
+  onRemove,
 }: {
   hosts: RecentHost[];
   onConnect: (host: RecentHost) => void;
-  onDelete: (host: RecentHost) => void;
+  onRemove: (host: RecentHost) => void;
 }) {
   if (hosts.length === 0) {
     return null;
@@ -599,9 +599,9 @@ function RecentHostsPanel({
               variant="ghost"
             />
             <PiButton
-              accessibilityLabel={`Delete recent host ${host.hostUrl}`}
-              label="Delete"
-              onPress={() => onDelete(host)}
+              accessibilityLabel={`Remove recent host reference ${host.hostUrl} from this device`}
+              label="Remove"
+              onPress={() => onRemove(host)}
               variant="danger"
             />
           </View>
@@ -613,12 +613,12 @@ function RecentHostsPanel({
 
 function RecentSessionsPanel({
   sessions,
-  onDelete,
+  onRemove,
   onOpenNew,
   onOpenPrevious,
 }: {
   sessions: RecentSession[];
-  onDelete: (session: RecentSession) => void;
+  onRemove: (session: RecentSession) => void;
   onOpenNew: (session: RecentSession) => void;
   onOpenPrevious: (session: RecentSession) => void;
 }) {
@@ -650,9 +650,9 @@ function RecentSessionsPanel({
               variant="ghost"
             />
             <PiButton
-              accessibilityLabel={`Delete recent session ${session.sessionId}`}
-              label="Delete"
-              onPress={() => onDelete(session)}
+              accessibilityLabel={`Remove recent session reference ${session.sessionId} from this device`}
+              label="Remove"
+              onPress={() => onRemove(session)}
               variant="danger"
             />
           </View>
