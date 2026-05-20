@@ -17,7 +17,7 @@
     "test:coverage": "vitest run --dir . --coverage"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.74.0",
+    "@earendil-works/pi-coding-agent": "0.75.3",
     "@pi-mobile/shared": "workspace:*",
     "ws": "^8.20.0"
   }
