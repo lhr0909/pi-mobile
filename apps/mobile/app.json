@@ -19,8 +19,14 @@
     "android": {
       "package": "ai.botisan.PiMobile"
     },
+    "web": {
+      "bundler": "metro"
+    },
     "extra": {
       "defaultHostUrl": "http://localhost:4739"
-    }
+    },
+    "plugins": [
+      "expo-router"
+    ]
   }
 }

@@ -1,5 +1,7 @@
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useReducer,
@@ -9,8 +11,10 @@ import {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -21,9 +25,12 @@ import {
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import CodeHighlighter, { type ReactStyle } from "react-native-code-highlighter";
 import Markdown from "react-native-markdown-display";
+import { useRouter } from "expo-router";
 import type {
   DirectoryList,
   JsonValue,
@@ -77,7 +84,99 @@ const MONO_FONT =
   }) ?? "monospace";
 const SESSION_KEYBOARD_BEHAVIOR = Platform.OS === "ios" ? "padding" : "height";
 
+interface PiMobileProviderProps {
+  children: ReactNode;
+}
+
+interface PiMobileContextValue {
+  state: AppViewState;
+  history: ClientHistory;
+  directoryList: DirectoryList | undefined;
+  directoryLoading: boolean;
+  directoryError: string | undefined;
+  pathSessions: SessionSummary[];
+  pathSessionsPath: string | undefined;
+  pathSessionsLoading: boolean;
+  pathSessionsError: string | undefined;
+  activeSession: SessionSnapshot | undefined;
+  browseDirectory: (path?: string) => Promise<DirectoryList | undefined>;
+  browseSessionsForSelectedPath: () => Promise<SessionSummary[]>;
+  connect: () => Promise<boolean>;
+  connectToRecentHost: (host: RecentHost) => Promise<boolean>;
+  openListedSession: (session: SessionSummary) => Promise<boolean>;
+  openNewSessionFromHistory: (session: RecentSession) => Promise<boolean>;
+  openPreviousSession: (session: RecentSession) => Promise<boolean>;
+  openSession: () => Promise<boolean>;
+  removeRecentHost: (host: RecentHost) => void;
+  removeRecentSession: (session: RecentSession) => void;
+  selectExplorerPath: () => void;
+  sendPrompt: () => Promise<void>;
+  setCwd: (value: string) => void;
+  setHostUrl: (value: string) => void;
+  setPrompt: (value: string) => void;
+  setToken: (value: string) => void;
+  showConnection: () => void;
+  steer: () => Promise<void>;
+  followUp: () => Promise<void>;
+  abort: () => Promise<void>;
+  toggleSessionHeader: () => void;
+}
+
+const PiMobileContext = createContext<PiMobileContextValue | undefined>(undefined);
+
+interface RawTextSelection {
+  title: string;
+  text: string;
+}
+
+function useLoadingAction() {
+  const [loadingAction, setLoadingAction] = useState<string | undefined>();
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const runLoadingAction = useCallback(
+    async <Result,>(key: string, action: () => Promise<Result>) => {
+      setLoadingAction(key);
+      try {
+        return await action();
+      } finally {
+        if (mountedRef.current) {
+          setLoadingAction((current) => current === key ? undefined : current);
+        }
+      }
+    },
+    [],
+  );
+
+  return { loadingAction, runLoadingAction };
+}
+
+function recentSessionActionKey(action: "new" | "previous", session: RecentSession): string {
+  return `${action}:${session.hostUrl}:${session.cwd}:${session.sessionId}`;
+}
+
+function recentHostActionKey(host: RecentHost): string {
+  return `connect:${host.hostUrl}`;
+}
+
+function pathSessionActionKey(session: SessionSummary): string {
+  return `open:${session.sessionFile ?? session.id}`;
+}
+
 export default function App() {
+  return (
+    <PiMobileProvider>
+      <HomeScreen />
+    </PiMobileProvider>
+  );
+}
+
+export function PiMobileProvider({ children }: PiMobileProviderProps) {
   const [state, dispatch] = useReducer(
     reduceAppViewState,
     createInitialAppViewState(DEFAULT_HOST_URL),
@@ -188,8 +287,20 @@ export default function App() {
   const connect = async () => {
     try {
       await connectToHost(state.hostUrl);
+      return true;
     } catch (error) {
       dispatch({ type: "disconnected", errorMessage: toErrorMessage(error) });
+      return false;
+    }
+  };
+
+  const connectToRecentHost = async (host: RecentHost) => {
+    try {
+      await connectToHost(host.hostUrl);
+      return true;
+    } catch (error) {
+      dispatch({ type: "disconnected", errorMessage: toErrorMessage(error) });
+      return false;
     }
   };
 
@@ -212,11 +323,13 @@ export default function App() {
   };
 
   const openSession = async () => {
-    if (!state.cwd.trim()) return;
+    if (!state.cwd.trim()) return false;
     try {
       await openNewSession(client, normalizeHistoryHostUrl(state.hostUrl), state.cwd.trim());
+      return true;
     } catch (error) {
       dispatch({ type: "setError", message: toErrorMessage(error) });
+      return false;
     }
   };
 
@@ -225,8 +338,10 @@ export default function App() {
       const sessionClient = await connectToHost(session.hostUrl);
       dispatch({ type: "setCwd", value: session.cwd });
       await openNewSession(sessionClient, session.hostUrl, session.cwd);
+      return true;
     } catch (error) {
       dispatch({ type: "setError", message: toErrorMessage(error) });
+      return false;
     }
   };
 
@@ -245,8 +360,10 @@ export default function App() {
       });
       dispatch({ type: "hostEvent", event: { type: "session_opened", snapshot } });
       rememberOpenedSession(session.hostUrl, snapshot);
+      return true;
     } catch (error) {
       dispatch({ type: "setError", message: toErrorMessage(error) });
+      return false;
     }
   };
 
@@ -262,13 +379,15 @@ export default function App() {
       });
       dispatch({ type: "hostEvent", event: { type: "session_opened", snapshot } });
       rememberOpenedSession(normalizeHistoryHostUrl(state.hostUrl), snapshot);
+      return true;
     } catch (error) {
       dispatch({ type: "setError", message: toErrorMessage(error) });
+      return false;
     }
   };
 
   const browseSessionsForSelectedPath = async () => {
-    await browseSessionsForPath(client, state.cwd);
+    return browseSessionsForPath(client, state.cwd);
   };
 
   const selectExplorerPath = () => {
@@ -279,72 +398,464 @@ export default function App() {
 
   const sendPrompt = async () => {
     if (!activeSession || !state.prompt.trim()) return;
-    await client.prompt(activeSession.session.id, { message: state.prompt });
-    dispatch({ type: "clearPrompt" });
+    try {
+      await client.prompt(activeSession.session.id, { message: state.prompt });
+      dispatch({ type: "clearPrompt" });
+    } catch (error) {
+      dispatch({ type: "setError", message: toErrorMessage(error) });
+    }
   };
 
   const steer = async () => {
     if (!activeSession || !state.prompt.trim()) return;
-    await client.steer(activeSession.session.id, { message: state.prompt });
-    dispatch({ type: "clearPrompt" });
+    try {
+      await client.steer(activeSession.session.id, { message: state.prompt });
+      dispatch({ type: "clearPrompt" });
+    } catch (error) {
+      dispatch({ type: "setError", message: toErrorMessage(error) });
+    }
   };
 
   const followUp = async () => {
     if (!activeSession || !state.prompt.trim()) return;
-    await client.followUp(activeSession.session.id, { message: state.prompt });
-    dispatch({ type: "clearPrompt" });
+    try {
+      await client.followUp(activeSession.session.id, { message: state.prompt });
+      dispatch({ type: "clearPrompt" });
+    } catch (error) {
+      dispatch({ type: "setError", message: toErrorMessage(error) });
+    }
   };
 
   const abort = async () => {
     if (!activeSession) return;
-    await client.abort(activeSession.session.id);
+    try {
+      await client.abort(activeSession.session.id);
+    } catch (error) {
+      dispatch({ type: "setError", message: toErrorMessage(error) });
+    }
   };
 
-  const showConnection = state.screen === "connection" || !activeSession;
+  const contextValue: PiMobileContextValue = {
+    state,
+    history,
+    directoryList,
+    directoryLoading,
+    directoryError,
+    pathSessions,
+    pathSessionsPath,
+    pathSessionsLoading,
+    pathSessionsError,
+    activeSession,
+    browseDirectory: (path) => browseDirectories(client, path),
+    browseSessionsForSelectedPath,
+    connect,
+    connectToRecentHost,
+    openListedSession,
+    openNewSessionFromHistory,
+    openPreviousSession,
+    openSession,
+    removeRecentHost,
+    removeRecentSession,
+    selectExplorerPath,
+    sendPrompt,
+    setCwd: (value) => dispatch({ type: "setCwd", value }),
+    setHostUrl: (value) => dispatch({ type: "setHostUrl", value }),
+    setPrompt: (value) => dispatch({ type: "setPrompt", value }),
+    setToken: (value) => dispatch({ type: "setToken", value }),
+    showConnection: () => dispatch({ type: "showConnection" }),
+    steer,
+    followUp,
+    abort,
+    toggleSessionHeader: () => dispatch({ type: "toggleSessionHeader" }),
+  };
+
+  return (
+    <PiMobileContext.Provider value={contextValue}>
+      <View style={styles.screen}>{children}</View>
+    </PiMobileContext.Provider>
+  );
+}
+
+export function usePiMobile(): PiMobileContextValue {
+  const context = useContext(PiMobileContext);
+  if (!context) {
+    throw new Error("usePiMobile must be used inside PiMobileProvider");
+  }
+  return context;
+}
+
+export function HomeScreen() {
+  const router = useRouter();
+  const {
+    activeSession,
+    connectToRecentHost,
+    history,
+    openNewSessionFromHistory,
+    openPreviousSession,
+    removeRecentHost,
+    removeRecentSession,
+    state,
+  } = usePiMobile();
+  const { loadingAction, runLoadingAction } = useLoadingAction();
+  const hasHistory = history.hosts.length > 0 || history.sessions.length > 0;
+
+  const openRecentSession = async (
+    session: RecentSession,
+    openSessionFromHistory: (session: RecentSession) => Promise<boolean>,
+  ) => {
+    if (await openSessionFromHistory(session)) {
+      router.replace("/session");
+    }
+  };
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.connectionScreen}
+      keyboardShouldPersistTaps="handled"
+      style={styles.connectionScroll}
+    >
+      <View style={styles.brandHeader}>
+        <Text style={styles.appTitle}>Pi Mobile</Text>
+        <Text style={styles.helpText}>Phone navigation for hosts, workspaces, sessions, and active chat.</Text>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Go to</Text>
+        <Text style={styles.dimLine}>
+          Setup is split into mobile pages now instead of one long web-style form.
+        </Text>
+        <View style={styles.historyActions}>
+          {activeSession ? (
+            <PiButton
+              accessibilityLabel="Open active session"
+              label="Active session"
+              onPress={() => router.push("/session")}
+              variant="primary"
+            />
+          ) : null}
+          <PiButton
+            accessibilityLabel="Connect host page"
+            label={state.connectionState === "connected" ? "Host" : "Connect host"}
+            onPress={() => router.push("/connect")}
+            variant={state.connectionState === "connected" ? "secondary" : "primary"}
+          />
+          <PiButton
+            accessibilityLabel="Workspace page"
+            disabled={state.connectionState !== "connected"}
+            label="Workspace"
+            onPress={() => router.push("/workspace")}
+            variant="secondary"
+          />
+        </View>
+        <Text style={styles.statusLine}>Status: {state.connectionState}</Text>
+        {state.client.connectionMessage ? (
+          <Text style={styles.dimLine}>{state.client.connectionMessage}</Text>
+        ) : null}
+        {state.errorMessage ? <Text style={styles.errorLine}>{state.errorMessage}</Text> : null}
+      </View>
+
+      <RecentSessionsPanel
+        loadingAction={loadingAction}
+        sessions={history.sessions}
+        onRemove={removeRecentSession}
+        onOpenNew={(session) => void runLoadingAction(
+          recentSessionActionKey("new", session),
+          () => openRecentSession(session, openNewSessionFromHistory),
+        )}
+        onOpenPrevious={(session) => void runLoadingAction(
+          recentSessionActionKey("previous", session),
+          () => openRecentSession(session, openPreviousSession),
+        )}
+      />
+      <RecentHostsPanel
+        hosts={history.hosts}
+        loadingAction={loadingAction}
+        onConnect={(host) => void runLoadingAction(recentHostActionKey(host), async () => {
+          if (await connectToRecentHost(host)) {
+            router.push("/workspace");
+          }
+        })}
+        onRemove={removeRecentHost}
+      />
+
+      {!hasHistory ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Start here</Text>
+          <Text style={styles.dimLine}>
+            Connect a host first. Then choose a workspace, browse stored sessions, or open a new session from dedicated pages.
+          </Text>
+          <PiButton
+            accessibilityLabel="Start host connection"
+            label="Connect host"
+            onPress={() => router.push("/connect")}
+            variant="primary"
+          />
+        </View>
+      ) : null}
+    </ScrollView>
+  );
+}
+
+export function ConnectHostScreen() {
+  const router = useRouter();
+  const { connect, setHostUrl, setToken, state } = usePiMobile();
+  const { loadingAction, runLoadingAction } = useLoadingAction();
+  const connectLoading = state.connectionState === "connecting" || loadingAction === "connect";
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.connectionScreen}
+      keyboardShouldPersistTaps="handled"
+      style={styles.connectionScroll}
+    >
+      <View style={styles.brandHeader}>
+        <Text style={styles.appTitle}>Host</Text>
+        <Text style={styles.helpText}>Connect to the machine running the Pi mobile host daemon.</Text>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Connect to host</Text>
+        <Text style={styles.label}>Host URL</Text>
+        <TextInput
+          accessibilityLabel="Host URL"
+          autoCapitalize="none"
+          value={state.hostUrl}
+          onChangeText={setHostUrl}
+          style={styles.input}
+        />
+        <Text style={styles.label}>Bearer token (optional)</Text>
+        <TextInput
+          accessibilityLabel="Host Token"
+          autoCapitalize="none"
+          secureTextEntry
+          value={state.token}
+          onChangeText={setToken}
+          style={styles.input}
+        />
+        <PiButton
+          accessibilityLabel="Connect"
+          disabled={connectLoading}
+          label="Connect host"
+          loading={connectLoading}
+          onPress={() => void runLoadingAction("connect", async () => {
+            if (await connect()) {
+              router.replace("/workspace");
+            }
+          })}
+          variant="primary"
+        />
+        <Text style={styles.statusLine}>Status: {state.connectionState}</Text>
+        {state.client.connectionMessage ? (
+          <Text style={styles.dimLine}>{state.client.connectionMessage}</Text>
+        ) : null}
+        {state.errorMessage ? <Text style={styles.errorLine}>{state.errorMessage}</Text> : null}
+      </View>
+    </ScrollView>
+  );
+}
+
+export function WorkspaceScreen() {
+  const router = useRouter();
+  const {
+    browseSessionsForSelectedPath,
+    openSession,
+    pathSessionsLoading,
+    setCwd,
+    state,
+  } = usePiMobile();
+  const { loadingAction, runLoadingAction } = useLoadingAction();
+  const openSessionLoading = loadingAction === "open-session";
+  const browseSessionsLoading = pathSessionsLoading || loadingAction === "browse-sessions";
+  const pathIsOpenable = state.cwd.trim().length === 0 || isHostWorkspacePath(state.cwd);
+  const canBrowse = state.connectionState === "connected" && state.cwd.trim().length > 0;
+  const canOpenSession = canBrowse && pathIsOpenable;
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.connectionScreen}
+      keyboardShouldPersistTaps="handled"
+      style={styles.connectionScroll}
+    >
+      <View style={styles.brandHeader}>
+        <Text style={styles.appTitle}>Workspace</Text>
+        <Text style={styles.helpText}>Choose the project path before opening or resuming a session.</Text>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>Selected host path</Text>
+        <TextInput
+          accessibilityLabel="Session Path"
+          autoCapitalize="none"
+          placeholder="Connect, browse, or paste /absolute/path"
+          placeholderTextColor={palette.dim}
+          value={state.cwd}
+          onChangeText={setCwd}
+          style={styles.input}
+        />
+        <Text style={pathIsOpenable ? styles.dimLine : styles.warningLine}>
+          {pathIsOpenable
+            ? "Documents is the default. You can also paste an absolute or ~/ path."
+            : "Use an absolute or ~/ host path before opening a session."}
+        </Text>
+        {state.connectionState !== "connected" ? (
+          <Text style={styles.warningLine}>Connect a host before browsing or opening sessions.</Text>
+        ) : null}
+        {state.errorMessage ? <Text style={styles.errorLine}>{state.errorMessage}</Text> : null}
+        <View style={styles.historyActions}>
+          <PiButton
+            accessibilityLabel="Open new session"
+            disabled={!canOpenSession || openSessionLoading}
+            label="Open new session"
+            loading={openSessionLoading}
+            onPress={() => void runLoadingAction("open-session", async () => {
+              if (await openSession()) {
+                router.replace("/session");
+              }
+            })}
+            variant="primary"
+          />
+          <PiButton
+            accessibilityLabel="Open path explorer"
+            disabled={state.connectionState !== "connected"}
+            label="Explore folders"
+            onPress={() => router.push("/explorer")}
+            variant="secondary"
+          />
+          <PiButton
+            accessibilityLabel="Browse sessions for selected path"
+            disabled={!canBrowse || browseSessionsLoading}
+            label="Stored sessions"
+            loading={browseSessionsLoading}
+            onPress={() => void runLoadingAction("browse-sessions", async () => {
+              await browseSessionsForSelectedPath();
+              router.push("/sessions");
+            })}
+            variant="secondary"
+          />
+          <PiButton
+            accessibilityLabel="Connect another host"
+            label="Host"
+            onPress={() => router.push("/connect")}
+            variant="ghost"
+          />
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+export function PathExplorerScreen() {
+  const router = useRouter();
+  const {
+    browseDirectory,
+    directoryError,
+    directoryList,
+    directoryLoading,
+    selectExplorerPath,
+    state,
+  } = usePiMobile();
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.connectionScreen}
+      keyboardShouldPersistTaps="handled"
+      style={styles.connectionScroll}
+    >
+      <PathExplorerPanel
+        connectionState={state.connectionState}
+        directoryError={directoryError}
+        directoryList={directoryList}
+        loading={directoryLoading}
+        onBrowseDirectory={(path) => void browseDirectory(path)}
+        onSelectCurrentPath={() => {
+          selectExplorerPath();
+          router.push("/workspace");
+        }}
+      />
+    </ScrollView>
+  );
+}
+
+export function PathSessionsScreen() {
+  const router = useRouter();
+  const {
+    browseSessionsForSelectedPath,
+    openListedSession,
+    pathSessions,
+    pathSessionsError,
+    pathSessionsLoading,
+    pathSessionsPath,
+    state,
+  } = usePiMobile();
+  const { loadingAction, runLoadingAction } = useLoadingAction();
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.connectionScreen}
+      keyboardShouldPersistTaps="handled"
+      style={styles.connectionScroll}
+    >
+      <PathSessionsPanel
+        connectionState={state.connectionState}
+        path={state.cwd}
+        sessions={pathSessions}
+        sessionsError={pathSessionsError}
+        sessionsLoading={pathSessionsLoading}
+        sessionsPath={pathSessionsPath}
+        openingSessionKey={loadingAction}
+        onBrowseSessions={() => void browseSessionsForSelectedPath()}
+        onOpenSession={(session) => void runLoadingAction(pathSessionActionKey(session), async () => {
+          if (await openListedSession(session)) {
+            router.replace("/session");
+          }
+        })}
+      />
+    </ScrollView>
+  );
+}
+
+export function ActiveSessionScreen() {
+  const router = useRouter();
+  const {
+    abort,
+    activeSession,
+    followUp,
+    sendPrompt,
+    setPrompt,
+    showConnection,
+    state,
+    steer,
+    toggleSessionHeader,
+  } = usePiMobile();
+  const { loadingAction, runLoadingAction } = useLoadingAction();
+
+  useEffect(() => {
+    if (!activeSession) {
+      router.replace("/");
+    }
+  }, [activeSession, router]);
+
+  if (!activeSession) {
+    return null;
+  }
 
   return (
     <SafeAreaView style={styles.screen}>
-      {showConnection ? (
-        <ConnectionScreen
-          directoryError={directoryError}
-          directoryList={directoryList}
-          directoryLoading={directoryLoading}
-          history={history}
-          pathSessions={pathSessions}
-          pathSessionsError={pathSessionsError}
-          pathSessionsLoading={pathSessionsLoading}
-          pathSessionsPath={pathSessionsPath}
-          state={state}
-          onBrowseDirectory={(path) => void browseDirectories(client, path)}
-          onBrowseSessions={() => void browseSessionsForSelectedPath()}
-          onConnect={connect}
-          onConnectRecentHost={(host) => void connectToHost(host.hostUrl).catch((error) => {
-            dispatch({ type: "disconnected", errorMessage: toErrorMessage(error) });
-          })}
-          onCwdChange={(value) => dispatch({ type: "setCwd", value })}
-          onRemoveRecentHost={removeRecentHost}
-          onRemoveRecentSession={removeRecentSession}
-          onHostUrlChange={(value) => dispatch({ type: "setHostUrl", value })}
-          onOpenListedSession={(session) => void openListedSession(session)}
-          onOpenNewSessionFromHistory={(session) => void openNewSessionFromHistory(session)}
-          onOpenPreviousSession={(session) => void openPreviousSession(session)}
-          onOpenSession={openSession}
-          onSelectExplorerPath={selectExplorerPath}
-          onTokenChange={(value) => dispatch({ type: "setToken", value })}
-        />
-      ) : (
-        <SessionScreen
-          snapshot={activeSession}
-          state={state}
-          onShowConnection={() => dispatch({ type: "showConnection" })}
-          onToggleHeader={() => dispatch({ type: "toggleSessionHeader" })}
-          onSendPrompt={sendPrompt}
-          onSteer={steer}
-          onFollowUp={followUp}
-          onAbort={abort}
-          onPromptChange={(value) => dispatch({ type: "setPrompt", value })}
-        />
-      )}
+      <SessionScreen
+        snapshot={activeSession}
+        state={state}
+        onShowConnection={() => {
+          showConnection();
+          router.push("/");
+        }}
+        commandLoading={loadingAction}
+        onToggleHeader={toggleSessionHeader}
+        onSendPrompt={() => void runLoadingAction("send", sendPrompt)}
+        onSteer={() => void runLoadingAction("steer", steer)}
+        onFollowUp={() => void runLoadingAction("follow-up", followUp)}
+        onAbort={() => void runLoadingAction("abort", abort)}
+        onPromptChange={setPrompt}
+      />
     </SafeAreaView>
   );
 }
@@ -365,216 +876,14 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-interface ConnectionScreenProps {
-  state: AppViewState;
-  history: ClientHistory;
-  directoryList: DirectoryList | undefined;
-  directoryLoading: boolean;
-  directoryError: string | undefined;
-  pathSessions: SessionSummary[];
-  pathSessionsPath: string | undefined;
-  pathSessionsLoading: boolean;
-  pathSessionsError: string | undefined;
-  onConnect: () => void;
-  onConnectRecentHost: (host: RecentHost) => void;
-  onRemoveRecentHost: (host: RecentHost) => void;
-  onRemoveRecentSession: (session: RecentSession) => void;
-  onOpenSession: () => void;
-  onOpenListedSession: (session: SessionSummary) => void;
-  onOpenPreviousSession: (session: RecentSession) => void;
-  onOpenNewSessionFromHistory: (session: RecentSession) => void;
-  onHostUrlChange: (value: string) => void;
-  onTokenChange: (value: string) => void;
-  onCwdChange: (value: string) => void;
-  onBrowseDirectory: (path: string) => void;
-  onBrowseSessions: () => void;
-  onSelectExplorerPath: () => void;
-}
-
-function ConnectionScreen({
-  state,
-  history,
-  directoryList,
-  directoryLoading,
-  directoryError,
-  pathSessions,
-  pathSessionsPath,
-  pathSessionsLoading,
-  pathSessionsError,
-  onConnect,
-  onConnectRecentHost,
-  onRemoveRecentHost,
-  onRemoveRecentSession,
-  onOpenSession,
-  onOpenListedSession,
-  onOpenPreviousSession,
-  onOpenNewSessionFromHistory,
-  onHostUrlChange,
-  onTokenChange,
-  onCwdChange,
-  onBrowseDirectory,
-  onBrowseSessions,
-  onSelectExplorerPath,
-}: ConnectionScreenProps) {
-  const hasHistory = history.hosts.length > 0 || history.sessions.length > 0;
-  const [setupExpanded, setSetupExpanded] = useState(!hasHistory);
-  useEffect(() => {
-    if (!hasHistory) {
-      setSetupExpanded(true);
-    }
-  }, [hasHistory]);
-
-  const pathIsOpenable =
-    state.cwd.trim().length === 0 || isHostWorkspacePath(state.cwd);
-  const canOpenSession =
-    state.connectionState === "connected" &&
-    state.cwd.trim().length > 0 &&
-    pathIsOpenable;
-
-  return (
-    <ScrollView
-      contentContainerStyle={styles.connectionScreen}
-      keyboardShouldPersistTaps="handled"
-      style={styles.connectionScroll}
-    >
-      <View style={styles.brandHeader}>
-        <Text style={styles.appTitle}>Pi Mobile</Text>
-        <Text style={styles.helpText}>Resume desktop and mobile Pi sessions from a phone-first home.</Text>
-      </View>
-
-      <RecentSessionsPanel
-        sessions={history.sessions}
-        onRemove={onRemoveRecentSession}
-        onOpenNew={onOpenNewSessionFromHistory}
-        onOpenPrevious={onOpenPreviousSession}
-      />
-      <RecentHostsPanel
-        hosts={history.hosts}
-        onConnect={onConnectRecentHost}
-        onRemove={onRemoveRecentHost}
-      />
-
-      {hasHistory ? (
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Browse or add</Text>
-          <Text style={styles.dimLine}>
-            Connect to a host, pick a folder, or browse stored desktop sessions by path.
-          </Text>
-          <PiButton
-            accessibilityLabel="Toggle host setup"
-            label={setupExpanded ? "Hide host setup" : "Browse host/path"}
-            onPress={() => setSetupExpanded((expanded) => !expanded)}
-            variant="secondary"
-          />
-        </View>
-      ) : null}
-
-      {setupExpanded ? (
-        <>
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Connect to host</Text>
-            <Text style={styles.label}>Host URL</Text>
-            <TextInput
-              accessibilityLabel="Host URL"
-              autoCapitalize="none"
-              value={state.hostUrl}
-              onChangeText={onHostUrlChange}
-              style={styles.input}
-            />
-            <Text style={styles.label}>Bearer token (optional)</Text>
-            <TextInput
-              accessibilityLabel="Host Token"
-              autoCapitalize="none"
-              secureTextEntry
-              value={state.token}
-              onChangeText={onTokenChange}
-              style={styles.input}
-            />
-            <PiButton
-              accessibilityLabel="Connect"
-              disabled={state.connectionState === "connecting"}
-              label={
-                state.connectionState === "connecting"
-                  ? "Connecting…"
-                  : "Connect host"
-              }
-              onPress={onConnect}
-              variant="primary"
-            />
-            <Text style={styles.statusLine}>Status: {state.connectionState}</Text>
-            {state.client.connectionMessage ? (
-              <Text style={styles.dimLine}>{state.client.connectionMessage}</Text>
-            ) : null}
-            {state.errorMessage ? (
-              <Text style={styles.errorLine}>{state.errorMessage}</Text>
-            ) : null}
-          </View>
-
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Workspace</Text>
-            <Text style={styles.label}>Selected host path</Text>
-            <TextInput
-              accessibilityLabel="Session Path"
-              autoCapitalize="none"
-              placeholder="Connect, browse, or paste /absolute/path"
-              placeholderTextColor={palette.dim}
-              value={state.cwd}
-              onChangeText={onCwdChange}
-              style={styles.input}
-            />
-            <Text style={pathIsOpenable ? styles.dimLine : styles.warningLine}>
-              {pathIsOpenable
-                ? "Documents is the default. You can also paste an absolute or ~/ path."
-                : "Use an absolute or ~/ host path before opening a session."}
-            </Text>
-            <View style={styles.historyActions}>
-              <PiButton
-                accessibilityLabel="New Session"
-                disabled={!canOpenSession}
-                label="Open new session"
-                onPress={onOpenSession}
-                variant="secondary"
-              />
-              <PiButton
-                accessibilityLabel="Browse sessions for selected path"
-                disabled={state.connectionState !== "connected" || state.cwd.trim().length === 0 || pathSessionsLoading}
-                label={pathSessionsLoading ? "Loading…" : "Browse sessions"}
-                onPress={onBrowseSessions}
-                variant="ghost"
-              />
-            </View>
-          </View>
-
-          <PathExplorerPanel
-            connectionState={state.connectionState}
-            directoryError={directoryError}
-            directoryList={directoryList}
-            loading={directoryLoading}
-            onBrowseDirectory={onBrowseDirectory}
-            onSelectCurrentPath={onSelectExplorerPath}
-          />
-          <PathSessionsPanel
-            connectionState={state.connectionState}
-            path={state.cwd}
-            sessions={pathSessions}
-            sessionsError={pathSessionsError}
-            sessionsLoading={pathSessionsLoading}
-            sessionsPath={pathSessionsPath}
-            onBrowseSessions={onBrowseSessions}
-            onOpenSession={onOpenListedSession}
-          />
-        </>
-      ) : null}
-    </ScrollView>
-  );
-}
-
 function RecentHostsPanel({
   hosts,
+  loadingAction,
   onConnect,
   onRemove,
 }: {
   hosts: RecentHost[];
+  loadingAction: string | undefined;
   onConnect: (host: RecentHost) => void;
   onRemove: (host: RecentHost) => void;
 }) {
@@ -595,6 +904,7 @@ function RecentHostsPanel({
             <PiButton
               accessibilityLabel={`Connect to ${host.hostUrl}`}
               label="Connect"
+              loading={loadingAction === recentHostActionKey(host)}
               onPress={() => onConnect(host)}
               variant="ghost"
             />
@@ -613,11 +923,13 @@ function RecentHostsPanel({
 
 function RecentSessionsPanel({
   sessions,
+  loadingAction,
   onRemove,
   onOpenNew,
   onOpenPrevious,
 }: {
   sessions: RecentSession[];
+  loadingAction: string | undefined;
   onRemove: (session: RecentSession) => void;
   onOpenNew: (session: RecentSession) => void;
   onOpenPrevious: (session: RecentSession) => void;
@@ -640,12 +952,14 @@ function RecentSessionsPanel({
             <PiButton
               accessibilityLabel={`Open previous session ${session.sessionId}`}
               label="Open previous"
+              loading={loadingAction === recentSessionActionKey("previous", session)}
               onPress={() => onOpenPrevious(session)}
               variant="secondary"
             />
             <PiButton
               accessibilityLabel={`Open new session in ${session.cwd}`}
               label="New here"
+              loading={loadingAction === recentSessionActionKey("new", session)}
               onPress={() => onOpenNew(session)}
               variant="ghost"
             />
@@ -690,6 +1004,7 @@ function PathExplorerPanel({
           accessibilityLabel="Browse home directory"
           disabled={!connected || loading}
           label="Home ~"
+          loading={loading}
           onPress={() => onBrowseDirectory(HOME_DIRECTORY_PATH)}
           variant="ghost"
         />
@@ -697,6 +1012,7 @@ function PathExplorerPanel({
           accessibilityLabel="Browse documents directory"
           disabled={!connected || loading}
           label="Documents"
+          loading={loading}
           onPress={() => onBrowseDirectory(DOCUMENTS_DIRECTORY_PATH)}
           variant="ghost"
         />
@@ -704,6 +1020,7 @@ function PathExplorerPanel({
           accessibilityLabel="Browse parent directory"
           disabled={!connected || loading || !directoryList?.parentPath}
           label="Up"
+          loading={loading}
           onPress={() => directoryList?.parentPath ? onBrowseDirectory(directoryList.parentPath) : undefined}
           variant="ghost"
         />
@@ -750,6 +1067,7 @@ function PathSessionsPanel({
   sessionsError,
   sessionsLoading,
   sessionsPath,
+  openingSessionKey,
   onBrowseSessions,
   onOpenSession,
 }: {
@@ -759,6 +1077,7 @@ function PathSessionsPanel({
   sessionsError: string | undefined;
   sessionsLoading: boolean;
   sessionsPath: string | undefined;
+  openingSessionKey: string | undefined;
   onBrowseSessions: () => void;
   onOpenSession: (session: SessionSummary) => void;
 }) {
@@ -776,7 +1095,8 @@ function PathSessionsPanel({
         <PiButton
           accessibilityLabel="Refresh sessions for selected path"
           disabled={!canBrowse || sessionsLoading}
-          label={sessionsLoading ? "Loading…" : "Refresh"}
+          label="Refresh"
+          loading={sessionsLoading}
           onPress={onBrowseSessions}
           variant="ghost"
         />
@@ -803,6 +1123,7 @@ function PathSessionsPanel({
                   accessibilityLabel={`Continue stored session ${session.id}`}
                   disabled={!session.sessionFile}
                   label="Continue"
+                  loading={openingSessionKey === pathSessionActionKey(session)}
                   onPress={() => onOpenSession(session)}
                   variant="secondary"
                 />
@@ -818,6 +1139,7 @@ function PathSessionsPanel({
 interface SessionScreenProps {
   snapshot: SessionSnapshot;
   state: AppViewState;
+  commandLoading: string | undefined;
   onShowConnection: () => void;
   onToggleHeader: () => void;
   onSendPrompt: () => void;
@@ -830,6 +1152,7 @@ interface SessionScreenProps {
 function SessionScreen({
   snapshot,
   state,
+  commandLoading,
   onShowConnection,
   onToggleHeader,
   onSendPrompt,
@@ -841,6 +1164,8 @@ function SessionScreen({
   const timelineRef = useRef<FlatList<TimelineItem>>(null);
   const userScrollActiveRef = useRef(false);
   const [timelinePinnedToBottom, setTimelinePinnedToBottom] = useState(true);
+  const [textMenuSelection, setTextMenuSelection] = useState<RawTextSelection | undefined>();
+  const [rawTextSelection, setRawTextSelection] = useState<RawTextSelection | undefined>();
   const working = isWorking(snapshot.session.runState);
 
   const scrollTimelineToEnd = useCallback((animated: boolean) => {
@@ -905,6 +1230,13 @@ function SessionScreen({
     scrollTimelineToEnd(true);
   }, [scrollTimelineToEnd]);
 
+  const openRawTextDrawer = useCallback(() => {
+    if (textMenuSelection) {
+      setRawTextSelection(textMenuSelection);
+    }
+    setTextMenuSelection(undefined);
+  }, [textMenuSelection]);
+
   return (
     <KeyboardAvoidingView
       behavior={SESSION_KEYBOARD_BEHAVIOR}
@@ -964,7 +1296,9 @@ function SessionScreen({
             ref={timelineRef}
             data={snapshot.timeline}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <TimelineRow item={item} />}
+            renderItem={({ item }) => (
+              <TimelineRow item={item} onSelectRawText={setTextMenuSelection} />
+            )}
             ListEmptyComponent={
               <Text style={styles.empty}>Send a prompt to start the timeline.</Text>
             }
@@ -995,6 +1329,7 @@ function SessionScreen({
         {working ? <WorkingIndicator /> : null}
 
         <Composer
+          commandLoading={commandLoading}
           cwd={snapshot.session.cwd}
           onAbort={onAbort}
           onFollowUp={onFollowUp}
@@ -1004,6 +1339,15 @@ function SessionScreen({
           prompt={state.prompt}
         />
       </View>
+      <MessageTextMenu
+        selection={textMenuSelection}
+        onClose={() => setTextMenuSelection(undefined)}
+        onSelectText={openRawTextDrawer}
+      />
+      <RawMarkdownDrawer
+        selection={rawTextSelection}
+        onClose={() => setRawTextSelection(undefined)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -1061,7 +1405,13 @@ function WorkingIndicator() {
   );
 }
 
-function TimelineRow({ item }: { item: TimelineItem }) {
+function TimelineRow({
+  item,
+  onSelectRawText,
+}: {
+  item: TimelineItem;
+  onSelectRawText: (selection: RawTextSelection) => void;
+}) {
   if (item.kind === "status") {
     return (
       <Text style={[styles.statusItem, statusToneStyle(item.tone)]}>
@@ -1076,26 +1426,68 @@ function TimelineRow({ item }: { item: TimelineItem }) {
 
   if (item.kind === "assistant") {
     return (
-      <View style={styles.assistantMessage}>
+      <SelectableMessageBlock
+        label={`Assistant message from ${formatTime(item.createdAt)}`}
+        onSelectRawText={onSelectRawText}
+        style={styles.assistantMessage}
+        text={item.text}
+      >
         <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
         <MarkdownText text={item.text} />
-      </View>
+      </SelectableMessageBlock>
     );
   }
 
   if (item.kind === "thinking") {
     return (
-      <View style={styles.thinkingBlock}>
+      <SelectableMessageBlock
+        label="Thinking block"
+        onSelectRawText={onSelectRawText}
+        style={styles.thinkingBlock}
+        text={item.text}
+      >
         <MarkdownText text={item.text} thinking />
-      </View>
+      </SelectableMessageBlock>
     );
   }
 
   return (
-    <View style={styles.userMessage}>
+    <SelectableMessageBlock
+      label={`User message from ${formatTime(item.createdAt)}`}
+      onSelectRawText={onSelectRawText}
+      style={styles.userMessage}
+      text={item.text}
+    >
       <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
       <MarkdownText text={item.text} />
-    </View>
+    </SelectableMessageBlock>
+  );
+}
+
+function SelectableMessageBlock({
+  children,
+  label,
+  onSelectRawText,
+  style,
+  text,
+}: {
+  children: ReactNode;
+  label: string;
+  onSelectRawText: (selection: RawTextSelection) => void;
+  style: StyleProp<ViewStyle>;
+  text: string;
+}) {
+  return (
+    <Pressable
+      accessibilityHint="Long press to select the raw markdown text for copying."
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      delayLongPress={350}
+      onLongPress={() => onSelectRawText({ title: label, text })}
+      style={style}
+    >
+      {children}
+    </Pressable>
   );
 }
 
@@ -1276,9 +1668,104 @@ function MarkdownText({
   );
 }
 
+function MessageTextMenu({
+  selection,
+  onClose,
+  onSelectText,
+}: {
+  selection: RawTextSelection | undefined;
+  onClose: () => void;
+  onSelectText: () => void;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      visible={selection !== undefined}
+    >
+      <View style={styles.modalRoot}>
+        <Pressable
+          accessibilityLabel="Cancel text selection"
+          accessibilityRole="button"
+          onPress={onClose}
+          style={styles.modalBackdrop}
+        />
+        <View style={styles.messageMenu}>
+          <Text style={styles.panelTitle}>Message options</Text>
+          <Text numberOfLines={1} style={styles.dimLine}>{selection?.title}</Text>
+          <View style={styles.historyActions}>
+            <PiButton
+              accessibilityLabel="Select raw markdown text"
+              label="Select text"
+              onPress={onSelectText}
+              variant="primary"
+            />
+            <PiButton
+              accessibilityLabel="Cancel text selection"
+              label="Cancel"
+              onPress={onClose}
+              variant="ghost"
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function RawMarkdownDrawer({
+  selection,
+  onClose,
+}: {
+  selection: RawTextSelection | undefined;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      transparent
+      visible={selection !== undefined}
+    >
+      <View style={styles.modalRoot}>
+        <Pressable
+          accessibilityLabel="Close raw markdown drawer"
+          accessibilityRole="button"
+          onPress={onClose}
+          style={styles.modalBackdrop}
+        />
+        <View style={styles.rawTextDrawer}>
+          <View style={styles.drawerHandle} />
+          <View style={styles.drawerHeader}>
+            <View style={styles.historyTextBlock}>
+              <Text style={styles.panelTitle}>Raw markdown</Text>
+              <Text numberOfLines={1} style={styles.dimLine}>{selection?.title}</Text>
+            </View>
+            <PiButton
+              accessibilityLabel="Close raw markdown drawer"
+              label="Close"
+              onPress={onClose}
+              variant="ghost"
+            />
+          </View>
+          <Text style={styles.dimLine}>Select and copy the raw message text below.</Text>
+          <ScrollView
+            contentContainerStyle={styles.rawMarkdownContent}
+            style={styles.rawMarkdownScroll}
+          >
+            <Text selectable style={styles.rawMarkdownText}>{selection?.text ?? ""}</Text>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 interface ComposerProps {
   cwd: string;
   prompt: string;
+  commandLoading: string | undefined;
   onPromptChange: (value: string) => void;
   onSendPrompt: () => void;
   onSteer: () => void;
@@ -1289,6 +1776,7 @@ interface ComposerProps {
 function Composer({
   cwd,
   prompt,
+  commandLoading,
   onPromptChange,
   onSendPrompt,
   onSteer,
@@ -1310,24 +1798,28 @@ function Composer({
         <PiButton
           accessibilityLabel="Send"
           label="Send"
+          loading={commandLoading === "send"}
           onPress={onSendPrompt}
           variant="primary"
         />
         <PiButton
           accessibilityLabel="Steer"
           label="Steer"
+          loading={commandLoading === "steer"}
           onPress={onSteer}
           variant="ghost"
         />
         <PiButton
           accessibilityLabel="Follow Up"
           label="Follow-up"
+          loading={commandLoading === "follow-up"}
           onPress={onFollowUp}
           variant="ghost"
         />
         <PiButton
           accessibilityLabel="Abort"
           label="Abort"
+          loading={commandLoading === "abort"}
           onPress={onAbort}
           variant="danger"
         />
@@ -1345,26 +1837,35 @@ interface PiButtonProps {
   onPress: () => void;
   variant: "primary" | "secondary" | "ghost" | "danger";
   disabled?: boolean;
+  loading?: boolean;
 }
 
 function PiButton({
   accessibilityLabel,
   disabled = false,
   label,
+  loading = false,
   onPress,
   variant,
 }: PiButtonProps) {
+  const buttonDisabled = disabled || loading;
+  const spinnerColor = variant === "primary" ? palette.bodyBg : palette.text;
+
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
-      disabled={disabled}
+      accessibilityState={{ busy: loading, disabled: buttonDisabled }}
+      disabled={buttonDisabled}
       onPress={onPress}
       style={[
         styles.piButton,
         buttonVariantStyle(variant),
-        disabled ? styles.disabledButton : null,
+        buttonDisabled ? styles.disabledButton : null,
       ]}
     >
+      {loading ? (
+        <ActivityIndicator color={spinnerColor} size="small" />
+      ) : null}
       <Text
         style={[
           styles.buttonText,
@@ -1826,6 +2327,55 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
+  modalRoot: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.62)",
+  },
+  messageMenu: {
+    backgroundColor: palette.containerBg,
+    borderTopColor: palette.dim,
+    borderTopWidth: 1,
+    gap: 12,
+    padding: 18,
+  },
+  rawTextDrawer: {
+    backgroundColor: palette.containerBg,
+    borderTopColor: palette.border,
+    borderTopWidth: 1,
+    gap: 12,
+    maxHeight: "78%",
+    padding: 18,
+  },
+  drawerHandle: {
+    alignSelf: "center",
+    backgroundColor: palette.dim,
+    borderRadius: 2,
+    height: 4,
+    width: 42,
+  },
+  drawerHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  rawMarkdownScroll: {
+    backgroundColor: palette.bodyBg,
+    borderColor: palette.dim,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  rawMarkdownContent: { padding: 12 },
+  rawMarkdownText: {
+    ...monoText,
+    color: palette.text,
+    fontSize: 13,
+    lineHeight: 20,
+  },
   composer: { gap: 8, paddingBottom: 10 },
   promptInput: {
     ...monoText,
@@ -1853,6 +2403,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 4,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },

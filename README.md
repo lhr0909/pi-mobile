@@ -25,7 +25,8 @@ The implementation follows the research decision: **SDK-hosted TypeScript daemon
 - Expo / React Native + TypeScript.
 - iPhone-first MVP with separate connection and session screens.
 - Connects to a configured host URL and optional token.
-- Presents a recents-first mobile home for resuming sessions, connecting hosts, and opening the host/path browser only when needed.
+- Uses Expo Router / React Navigation native-stack pages for Home, Host, Workspace, Path Explorer, Stored Sessions, and active Session navigation instead of one stacked setup form.
+- Presents a recents-first mobile home for resuming sessions, connecting hosts, and jumping into the relevant navigation page only when needed.
 - Persists recent hosts and recent host/path/session combinations on the client for quick reconnects, with client-side remove-from-recents actions for keeping the mobile home concise without deleting anything on the host machine.
 - Seeds directory browsing from `~/Documents` by default, includes quick Home (`~`) and Documents shortcuts, and supports `~/...` workspace paths.
 - Lists stored Pi sessions for the selected workspace path so desktop sessions can be continued from mobile.
@@ -106,12 +107,13 @@ The app defaults to `http://localhost:4739`, which works for an iOS simulator ta
 
 Flow:
 
-1. Open the mobile home.
+1. Open the mobile home. It is now a navigation hub rather than a long setup form.
 2. Resume from a saved session row, connect to a recent host row, or remove stale recent host/session references from this client device.
-3. Tap **Browse host/path** when you need manual setup. Enter the host URL/token and tap **Connect host**. The app reads `/api/host/status`, remembers the host locally, and opens the path explorer at `~/Documents` unless you already entered an absolute or `~/...` path.
-4. Use the **Documents**, **Home ~**, and **Up** shortcuts or folder rows to browse, then tap **Use this path**.
-5. Tap **Browse sessions** / **Refresh** to list stored desktop/mobile Pi sessions for the selected path, then **Continue** a listed session, choose **New here** from recents, or tap **Open new session** for a fresh session.
-6. Use the bottom composer to send prompts, steer/follow up, or abort the active turn.
+3. Open **Host** to enter the host URL/token and tap **Connect host**. The app reads `/api/host/status`, remembers the host locally, and advances to **Workspace**.
+4. Use **Workspace** to paste or confirm an absolute/`~/...` path, open a new session, jump to **Path explorer**, or browse **Stored sessions** for the selected path.
+5. Use **Path explorer** with **Documents**, **Home ~**, and **Up** shortcuts or folder rows, then tap **Use this path** to return to **Workspace**.
+6. Use **Stored sessions** / **Refresh** to list desktop/mobile Pi sessions for the selected path, then **Continue** a listed session, choose **New here** from recents, or open a fresh session from **Workspace**.
+7. Use the active **Session** page bottom composer to send prompts, steer/follow up, or abort the active turn.
 
 When simulator tapping is unreliable, use Expo Web for browser-based mobile viewport smoke tests. Start these in separate terminals:
 
