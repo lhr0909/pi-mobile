@@ -407,7 +407,7 @@ export function PiMobileProvider({ children }: PiMobileProviderProps) {
 
   return (
     <PiMobileContext.Provider value={contextValue}>
-      <SafeAreaView style={styles.screen}>{children}</SafeAreaView>
+      <View style={styles.screen}>{children}</View>
     </PiMobileContext.Provider>
   );
 }
@@ -745,20 +745,22 @@ export function ActiveSessionScreen() {
   }
 
   return (
-    <SessionScreen
-      snapshot={activeSession}
-      state={state}
-      onShowConnection={() => {
-        showConnection();
-        router.push("/");
-      }}
-      onToggleHeader={toggleSessionHeader}
-      onSendPrompt={sendPrompt}
-      onSteer={steer}
-      onFollowUp={followUp}
-      onAbort={abort}
-      onPromptChange={setPrompt}
-    />
+    <SafeAreaView style={styles.screen}>
+      <SessionScreen
+        snapshot={activeSession}
+        state={state}
+        onShowConnection={() => {
+          showConnection();
+          router.push("/");
+        }}
+        onToggleHeader={toggleSessionHeader}
+        onSendPrompt={sendPrompt}
+        onSteer={steer}
+        onFollowUp={followUp}
+        onAbort={abort}
+        onPromptChange={setPrompt}
+      />
+    </SafeAreaView>
   );
 }
 
