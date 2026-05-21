@@ -42,6 +42,15 @@ describe("HostController", () => {
     });
   });
 
+  it("expands tilde session paths before listing stored sessions", async () => {
+    const factory = new FakeRuntimeFactory();
+    const controller = new HostController(factory);
+
+    await controller.listSessions("~/Documents");
+
+    expect(factory.listedCwds[0]).toBe(path.resolve(os.homedir(), "Documents"));
+  });
+
   it("normalizes relative session paths before using the runtime", async () => {
     const factory = new FakeRuntimeFactory();
     const controller = new HostController(factory);

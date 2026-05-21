@@ -8,13 +8,25 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "ai.botisan.PiMobile",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "appleTeamId": "NFKM5YQJD7",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
       "package": "ai.botisan.PiMobile"
     },
+    "web": {
+      "bundler": "metro"
+    },
     "extra": {
       "defaultHostUrl": "http://localhost:4739"
-    }
+    },
+    "plugins": [
+      "expo-router"
+    ]
   }
 }

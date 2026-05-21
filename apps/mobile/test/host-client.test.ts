@@ -55,6 +55,36 @@ describe("HostClient", () => {
     });
   });
 
+  it("lists sessions for encoded host paths", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sessions: [
+            {
+              id: "s1",
+              cwd: "/Users/simon/Documents/Project A",
+              title: "Project A",
+              sessionFile: "/tmp/session.jsonl",
+              runState: "idle",
+              messageCount: 3,
+              updatedAt: "2026-05-19T00:00:00.000Z",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const client = new HostClient({ baseUrl: "http://host.test" });
+
+    await expect(client.listSessions("/Users/simon/Documents/Project A")).resolves.toMatchObject([
+      { id: "s1", title: "Project A" },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://host.test/api/sessions?cwd=%2FUsers%2Fsimon%2FDocuments%2FProject%20A",
+      { headers: {} },
+    );
+  });
+
   it("lists host directories", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

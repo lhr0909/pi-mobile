@@ -99,8 +99,13 @@ export function isAbsoluteHostPath(value: string): boolean {
   return trimmed.startsWith("/") || /^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith("\\\\");
 }
 
+export function isHostWorkspacePath(value: string): boolean {
+  const trimmed = value.trim();
+  return isAbsoluteHostPath(trimmed) || trimmed === "~" || trimmed.startsWith("~/") || trimmed.startsWith("~\\");
+}
+
 function nextWorkspacePath(currentPath: string, hostCwd: string): string {
-  return isAbsoluteHostPath(currentPath) ? currentPath : hostCwd;
+  return isHostWorkspacePath(currentPath) ? currentPath : hostCwd;
 }
 
 function withoutError(state: AppViewState): AppViewState {

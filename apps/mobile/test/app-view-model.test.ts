@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInitialAppViewState, isAbsoluteHostPath, reduceAppViewState } from "../src/app-view-model.js";
+import { createInitialAppViewState, isAbsoluteHostPath, isHostWorkspacePath, reduceAppViewState } from "../src/app-view-model.js";
 
 const hostStatus = {
   name: "Mac",
@@ -37,6 +37,15 @@ describe("app view model", () => {
     });
 
     expect(reduceAppViewState(absolute, { type: "connected", status: hostStatus }).cwd).toBe("/tmp/other");
+  });
+
+  it("keeps an explicit tilde workspace path when connecting", () => {
+    const tilde = reduceAppViewState(createInitialAppViewState("http://localhost:4739"), {
+      type: "setCwd",
+      value: "~/Documents/project",
+    });
+
+    expect(reduceAppViewState(tilde, { type: "connected", status: hostStatus }).cwd).toBe("~/Documents/project");
   });
 
   it("switches to the session screen after a session opens", () => {
@@ -101,5 +110,11 @@ describe("app view model", () => {
     expect(isAbsoluteHostPath("/tmp/project")).toBe(true);
     expect(isAbsoluteHostPath("C:\\project")).toBe(true);
     expect(isAbsoluteHostPath("relative/project")).toBe(false);
+  });
+
+  it("identifies tilde paths as host workspace paths", () => {
+    expect(isHostWorkspacePath("~/Documents")).toBe(true);
+    expect(isHostWorkspacePath("~")).toBe(true);
+    expect(isHostWorkspacePath("relative/project")).toBe(false);
   });
 });
