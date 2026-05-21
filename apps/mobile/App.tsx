@@ -30,7 +30,7 @@ import {
 } from "react-native";
 import CodeHighlighter, { type ReactStyle } from "react-native-code-highlighter";
 import Markdown from "react-native-markdown-display";
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import type {
   DirectoryList,
   JsonValue,
@@ -822,7 +822,6 @@ export function ActiveSessionScreen() {
     followUp,
     sendPrompt,
     setPrompt,
-    showConnection,
     state,
     steer,
     toggleSessionHeader,
@@ -840,14 +839,11 @@ export function ActiveSessionScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <View style={styles.screen}>
+      <Stack.Screen options={{ title: `Session ${shortSessionId(activeSession.session.id)}` }} />
       <SessionScreen
         snapshot={activeSession}
         state={state}
-        onShowConnection={() => {
-          showConnection();
-          router.push("/");
-        }}
         commandLoading={loadingAction}
         onToggleHeader={toggleSessionHeader}
         onSendPrompt={() => void runLoadingAction("send", sendPrompt)}
@@ -856,7 +852,7 @@ export function ActiveSessionScreen() {
         onAbort={() => void runLoadingAction("abort", abort)}
         onPromptChange={setPrompt}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1140,7 +1136,6 @@ interface SessionScreenProps {
   snapshot: SessionSnapshot;
   state: AppViewState;
   commandLoading: string | undefined;
-  onShowConnection: () => void;
   onToggleHeader: () => void;
   onSendPrompt: () => void;
   onSteer: () => void;
@@ -1153,7 +1148,6 @@ function SessionScreen({
   snapshot,
   state,
   commandLoading,
-  onShowConnection,
   onToggleHeader,
   onSendPrompt,
   onSteer,
@@ -1253,12 +1247,6 @@ function SessionScreen({
                 accessibilityLabel="Toggle Session Header"
                 label={state.sessionHeaderCollapsed ? "Show" : "Hide"}
                 onPress={onToggleHeader}
-                variant="ghost"
-              />
-              <PiButton
-                accessibilityLabel="Connection"
-                label="Host"
-                onPress={onShowConnection}
                 variant="ghost"
               />
             </View>
