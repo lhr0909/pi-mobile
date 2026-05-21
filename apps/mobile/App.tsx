@@ -838,9 +838,12 @@ export function ActiveSessionScreen() {
     return null;
   }
 
+  const sessionHeaderTitle = activeSession.session.title.trim()
+    || `Session ${shortSessionId(activeSession.session.id)}`;
+
   return (
     <View style={styles.screen}>
-      <Stack.Screen options={{ title: `Session ${shortSessionId(activeSession.session.id)}` }} />
+      <Stack.Screen options={{ title: sessionHeaderTitle }} />
       <SessionScreen
         snapshot={activeSession}
         state={state}
