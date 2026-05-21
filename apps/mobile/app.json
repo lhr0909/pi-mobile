@@ -8,7 +8,13 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "ai.botisan.PiMobile",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "appleTeamId": "NFKM5YQJD7",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
       "package": "ai.botisan.PiMobile"

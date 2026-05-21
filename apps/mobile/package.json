@@ -11,7 +11,9 @@
     "web:test": "pnpm web:export && pnpm web:serve",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --dir .",
-    "test:coverage": "vitest run --dir . --coverage"
+    "test:coverage": "vitest run --dir . --coverage",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
