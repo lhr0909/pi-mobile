@@ -504,7 +504,7 @@ export function HomeScreen() {
     openSessionFromHistory: (session: RecentSession) => Promise<boolean>,
   ) => {
     if (await openSessionFromHistory(session)) {
-      router.replace("/session");
+      router.push("/session");
     }
   };
 
@@ -709,7 +709,7 @@ export function WorkspaceScreen() {
             loading={openSessionLoading}
             onPress={() => void runLoadingAction("open-session", async () => {
               if (await openSession()) {
-                router.replace("/session");
+                router.push("/session");
               }
             })}
             variant="primary"
@@ -806,7 +806,7 @@ export function PathSessionsScreen() {
         onBrowseSessions={() => void browseSessionsForSelectedPath()}
         onOpenSession={(session) => void runLoadingAction(pathSessionActionKey(session), async () => {
           if (await openListedSession(session)) {
-            router.replace("/session");
+            router.push("/session");
           }
         })}
       />
