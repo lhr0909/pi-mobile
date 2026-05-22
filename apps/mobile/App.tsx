@@ -770,7 +770,11 @@ export function PathExplorerScreen() {
         onBrowseDirectory={(path) => void browseDirectory(path)}
         onSelectCurrentPath={() => {
           selectExplorerPath();
-          router.push("/workspace");
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace("/workspace");
+          }
         }}
       />
     </ScrollView>
