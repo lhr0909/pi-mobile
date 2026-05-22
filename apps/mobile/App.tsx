@@ -1697,13 +1697,19 @@ function RawMarkdownDrawer({
               variant="ghost"
             />
           </View>
-          <Text style={styles.dimLine}>Select and copy the raw message text below.</Text>
-          <ScrollView
-            contentContainerStyle={styles.rawMarkdownContent}
-            style={styles.rawMarkdownScroll}
-          >
-            <Text selectable style={styles.rawMarkdownText}>{selection?.text ?? ""}</Text>
-          </ScrollView>
+          <Text style={styles.dimLine}>Drag the selection handles to copy any part of the raw message text below.</Text>
+          <TextInput
+            accessibilityLabel="Selectable raw markdown text"
+            editable={false}
+            multiline
+            readOnly
+            scrollEnabled
+            selectTextOnFocus={false}
+            selectionColor={palette.borderAccent}
+            style={styles.rawMarkdownInput}
+            textAlignVertical="top"
+            value={selection?.text ?? ""}
+          />
         </View>
       </View>
     </Modal>
@@ -2291,18 +2297,18 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: "space-between",
   },
-  rawMarkdownScroll: {
+  rawMarkdownInput: {
+    ...monoText,
     backgroundColor: palette.bodyBg,
     borderColor: palette.dim,
     borderRadius: 4,
     borderWidth: 1,
-  },
-  rawMarkdownContent: { padding: 12 },
-  rawMarkdownText: {
-    ...monoText,
     color: palette.text,
+    flexGrow: 1,
     fontSize: 13,
     lineHeight: 20,
+    minHeight: 220,
+    padding: 12,
   },
   composer: { gap: 8, paddingBottom: 10 },
   promptInput: {
