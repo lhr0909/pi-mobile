@@ -17,7 +17,7 @@ export default function RootLayout() {
         <Stack.Screen name="workspace" options={{ title: "Workspace" }} />
         <Stack.Screen name="explorer" options={{ title: "Path explorer" }} />
         <Stack.Screen name="sessions" options={{ title: "Stored sessions" }} />
-        <Stack.Screen name="session" options={{ headerShown: false }} />
+        <Stack.Screen name="session" options={{ title: "Session" }} />
       </Stack>
     </PiMobileProvider>
   );

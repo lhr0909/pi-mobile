@@ -13,11 +13,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,7 +30,8 @@ import {
 } from "react-native";
 import CodeHighlighter, { type ReactStyle } from "react-native-code-highlighter";
 import Markdown from "react-native-markdown-display";
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
+import { useHeaderHeight } from "@react-navigation/elements";
 import type {
   DirectoryList,
   JsonValue,
@@ -504,7 +505,7 @@ export function HomeScreen() {
     openSessionFromHistory: (session: RecentSession) => Promise<boolean>,
   ) => {
     if (await openSessionFromHistory(session)) {
-      router.replace("/session");
+      router.push("/session");
     }
   };
 
@@ -709,7 +710,7 @@ export function WorkspaceScreen() {
             loading={openSessionLoading}
             onPress={() => void runLoadingAction("open-session", async () => {
               if (await openSession()) {
-                router.replace("/session");
+                router.push("/session");
               }
             })}
             variant="primary"
@@ -769,7 +770,11 @@ export function PathExplorerScreen() {
         onBrowseDirectory={(path) => void browseDirectory(path)}
         onSelectCurrentPath={() => {
           selectExplorerPath();
-          router.push("/workspace");
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace("/workspace");
+          }
         }}
       />
     </ScrollView>
@@ -806,7 +811,7 @@ export function PathSessionsScreen() {
         onBrowseSessions={() => void browseSessionsForSelectedPath()}
         onOpenSession={(session) => void runLoadingAction(pathSessionActionKey(session), async () => {
           if (await openListedSession(session)) {
-            router.replace("/session");
+            router.push("/session");
           }
         })}
       />
@@ -822,10 +827,8 @@ export function ActiveSessionScreen() {
     followUp,
     sendPrompt,
     setPrompt,
-    showConnection,
     state,
     steer,
-    toggleSessionHeader,
   } = usePiMobile();
   const { loadingAction, runLoadingAction } = useLoadingAction();
 
@@ -839,24 +842,23 @@ export function ActiveSessionScreen() {
     return null;
   }
 
+  const sessionHeaderTitle = activeSession.session.title.trim()
+    || `Session ${shortSessionId(activeSession.session.id)}`;
+
   return (
-    <SafeAreaView style={styles.screen}>
+    <View style={styles.screen}>
+      <Stack.Screen options={{ title: sessionHeaderTitle }} />
       <SessionScreen
         snapshot={activeSession}
         state={state}
-        onShowConnection={() => {
-          showConnection();
-          router.push("/");
-        }}
         commandLoading={loadingAction}
-        onToggleHeader={toggleSessionHeader}
         onSendPrompt={() => void runLoadingAction("send", sendPrompt)}
         onSteer={() => void runLoadingAction("steer", steer)}
         onFollowUp={() => void runLoadingAction("follow-up", followUp)}
         onAbort={() => void runLoadingAction("abort", abort)}
         onPromptChange={setPrompt}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1140,8 +1142,6 @@ interface SessionScreenProps {
   snapshot: SessionSnapshot;
   state: AppViewState;
   commandLoading: string | undefined;
-  onShowConnection: () => void;
-  onToggleHeader: () => void;
   onSendPrompt: () => void;
   onSteer: () => void;
   onFollowUp: () => void;
@@ -1153,8 +1153,6 @@ function SessionScreen({
   snapshot,
   state,
   commandLoading,
-  onShowConnection,
-  onToggleHeader,
   onSendPrompt,
   onSteer,
   onFollowUp,
@@ -1166,6 +1164,8 @@ function SessionScreen({
   const [timelinePinnedToBottom, setTimelinePinnedToBottom] = useState(true);
   const [textMenuSelection, setTextMenuSelection] = useState<RawTextSelection | undefined>();
   const [rawTextSelection, setRawTextSelection] = useState<RawTextSelection | undefined>();
+  const headerHeight = useHeaderHeight();
+  const keyboardVerticalOffset = Platform.OS === "ios" ? headerHeight : 0;
   const working = isWorking(snapshot.session.runState);
 
   const scrollTimelineToEnd = useCallback((animated: boolean) => {
@@ -1240,57 +1240,10 @@ function SessionScreen({
   return (
     <KeyboardAvoidingView
       behavior={SESSION_KEYBOARD_BEHAVIOR}
+      keyboardVerticalOffset={keyboardVerticalOffset}
       style={styles.sessionKeyboardView}
     >
       <View style={styles.sessionScreen}>
-        <View style={styles.sessionHeader}>
-          <View style={styles.headerTopRow}>
-            <Text style={styles.sessionTitle}>
-              Session: {shortSessionId(snapshot.session.id)}
-            </Text>
-            <View style={styles.headerActions}>
-              <PiButton
-                accessibilityLabel="Toggle Session Header"
-                label={state.sessionHeaderCollapsed ? "Show" : "Hide"}
-                onPress={onToggleHeader}
-                variant="ghost"
-              />
-              <PiButton
-                accessibilityLabel="Connection"
-                label="Host"
-                onPress={onShowConnection}
-                variant="ghost"
-              />
-            </View>
-          </View>
-          {state.sessionHeaderCollapsed ? (
-            <Text numberOfLines={1} style={styles.collapsedHeaderSummary}>
-              {snapshot.session.cwd}
-            </Text>
-          ) : (
-            <>
-              <InfoRow label="Path" value={snapshot.session.cwd} />
-              <InfoRow label="State" value={snapshot.session.runState} />
-              <InfoRow
-                label="Messages"
-                value={String(snapshot.session.messageCount)}
-              />
-              {snapshot.session.thinkingLevel ? (
-                <InfoRow
-                  label="Thinking"
-                  value={snapshot.session.thinkingLevel}
-                />
-              ) : null}
-              {snapshot.session.model ? (
-                <InfoRow
-                  label="Model"
-                  value={formatModel(snapshot.session.model)}
-                />
-              ) : null}
-            </>
-          )}
-        </View>
-
         <View style={styles.timelineContainer}>
           <FlatList
             ref={timelineRef}
@@ -1303,6 +1256,7 @@ function SessionScreen({
               <Text style={styles.empty}>Send a prompt to start the timeline.</Text>
             }
             contentContainerStyle={styles.timelineContent}
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             keyboardShouldPersistTaps="handled"
             onContentSizeChange={() => keepTimelineAtBottom()}
             onLayout={() => keepTimelineAtBottom()}
@@ -1331,6 +1285,8 @@ function SessionScreen({
         <Composer
           commandLoading={commandLoading}
           cwd={snapshot.session.cwd}
+          model={snapshot.session.model}
+          thinkingLevel={snapshot.session.thinkingLevel}
           onAbort={onAbort}
           onFollowUp={onFollowUp}
           onPromptChange={onPromptChange}
@@ -1360,15 +1316,6 @@ function timelineScrollMetricsFromEvent(
     layoutHeight: event.nativeEvent.layoutMeasurement.height,
     offsetY: event.nativeEvent.contentOffset.y,
   };
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}:</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  );
 }
 
 const WORKING_SPINNER_FRAMES = [
@@ -1484,6 +1431,7 @@ function SelectableMessageBlock({
       accessibilityRole="button"
       delayLongPress={350}
       onLongPress={() => onSelectRawText({ title: label, text })}
+      onPress={() => Keyboard.dismiss()}
       style={style}
     >
       {children}
@@ -1749,13 +1697,19 @@ function RawMarkdownDrawer({
               variant="ghost"
             />
           </View>
-          <Text style={styles.dimLine}>Select and copy the raw message text below.</Text>
-          <ScrollView
-            contentContainerStyle={styles.rawMarkdownContent}
-            style={styles.rawMarkdownScroll}
-          >
-            <Text selectable style={styles.rawMarkdownText}>{selection?.text ?? ""}</Text>
-          </ScrollView>
+          <Text style={styles.dimLine}>Drag the selection handles to copy any part of the raw message text below.</Text>
+          <TextInput
+            accessibilityLabel="Selectable raw markdown text"
+            editable={false}
+            multiline
+            readOnly
+            scrollEnabled
+            selectTextOnFocus={false}
+            selectionColor={palette.borderAccent}
+            style={styles.rawMarkdownInput}
+            textAlignVertical="top"
+            value={selection?.text ?? ""}
+          />
         </View>
       </View>
     </Modal>
@@ -1766,6 +1720,8 @@ interface ComposerProps {
   cwd: string;
   prompt: string;
   commandLoading: string | undefined;
+  model: unknown;
+  thinkingLevel: string | undefined;
   onPromptChange: (value: string) => void;
   onSendPrompt: () => void;
   onSteer: () => void;
@@ -1777,12 +1733,16 @@ function Composer({
   cwd,
   prompt,
   commandLoading,
+  model,
+  thinkingLevel,
   onPromptChange,
   onSendPrompt,
   onSteer,
   onFollowUp,
   onAbort,
 }: ComposerProps) {
+  const metadata = formatComposerMetadata(model, thinkingLevel);
+
   return (
     <View style={styles.composer}>
       <TextInput
@@ -1824,9 +1784,10 @@ function Composer({
           variant="danger"
         />
       </View>
-      <Text numberOfLines={1} style={styles.composerFooter}>
-        {cwd} · mobile · sdk
-      </Text>
+      <View style={styles.composerFooterBlock}>
+        <Text numberOfLines={1} style={styles.composerFooter}>{cwd}</Text>
+        <Text numberOfLines={1} style={styles.composerFooter}>{metadata}</Text>
+      </View>
     </View>
   );
 }
@@ -1938,6 +1899,20 @@ function formatTime(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatComposerMetadata(
+  model: unknown,
+  thinkingLevel: string | undefined,
+): string {
+  const parts: string[] = [];
+  if (model !== undefined && model !== null) {
+    parts.push(`model: ${formatModel(model)}`);
+  }
+  if (thinkingLevel) {
+    parts.push(`thinking: ${thinkingLevel}`);
+  }
+  return [...parts, "mobile", "sdk"].join(" · ");
 }
 
 function formatModel(model: unknown): string {
@@ -2144,47 +2119,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   sessionScreen: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
-  sessionHeader: {
-    backgroundColor: palette.containerBg,
-    borderRadius: 4,
-    gap: 6,
-    padding: 18,
-  },
-  headerTopRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  headerActions: { flexDirection: "row", gap: 8 },
-  sessionTitle: {
-    ...monoText,
-    color: palette.borderAccent,
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  collapsedHeaderSummary: {
-    ...monoText,
-    color: palette.dim,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  infoRow: { alignItems: "baseline", flexDirection: "row", gap: 8 },
-  infoLabel: {
-    ...monoText,
-    color: palette.dim,
-    fontSize: 12,
-    fontWeight: "800",
-    minWidth: 74,
-  },
-  infoValue: {
-    ...monoText,
-    color: palette.text,
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
-  },
   timelineContainer: { flex: 1 },
   timeline: { flex: 1 },
   timelineContent: { gap: 18, paddingVertical: 18 },
@@ -2363,18 +2297,18 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: "space-between",
   },
-  rawMarkdownScroll: {
+  rawMarkdownInput: {
+    ...monoText,
     backgroundColor: palette.bodyBg,
     borderColor: palette.dim,
     borderRadius: 4,
     borderWidth: 1,
-  },
-  rawMarkdownContent: { padding: 12 },
-  rawMarkdownText: {
-    ...monoText,
     color: palette.text,
+    flexGrow: 1,
     fontSize: 13,
     lineHeight: 20,
+    minHeight: 220,
+    padding: 12,
   },
   composer: { gap: 8, paddingBottom: 10 },
   promptInput: {
@@ -2393,6 +2327,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   commandRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  composerFooterBlock: { gap: 2 },
   composerFooter: {
     ...monoText,
     color: palette.dim,

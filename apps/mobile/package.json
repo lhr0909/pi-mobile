@@ -19,6 +19,7 @@
     "@expo/metro-runtime": "~6.1.2",
     "@pi-mobile/shared": "workspace:*",
     "@react-native-async-storage/async-storage": "^3.0.2",
+    "@react-navigation/elements": "^2.9.18",
     "expo": "~54.0.25",
     "expo-constants": "~18.0.13",
     "expo-linking": "~8.0.12",
