@@ -59,3 +59,11 @@
 {"type":"observation_added","observationId":"observation-25","source":"gh pr edit 9","observation":"Updated PR #9 title to `chore: update @earendil-works/pi-coding-agent to 0.78.0` and rewrote the body with clearer Summary and Validation sections.","createdAt":"2026-05-31T08:26:03.589Z"}
 {"type":"task_finished","taskId":"task-7","finishedAt":"2026-05-31T08:26:05.544Z"}
 {"type":"task_log_added","logId":"log-14","taskId":"task-7","content":"Updated the PR title/body to name the exact package/version, clarify the lockfile update, and list validation commands in code formatting.","createdAt":"2026-05-31T08:26:05.544Z"}
+{"type":"task_created","taskId":"task-8","title":"Replace literal newline escapes in PR message","createdAt":"2026-05-31T09:36:34.405Z"}
+{"type":"task_started","taskId":"task-8","startedAt":"2026-05-31T09:36:36.450Z"}
+{"type":"task_log_added","logId":"log-15","taskId":"task-8","content":"User reports the PR body still contains literal `\\n` characters. Inspecting the raw body and replacing it using a body file with actual newlines.","createdAt":"2026-05-31T09:36:36.450Z"}
+{"type":"observation_added","observationId":"observation-26","source":"node script wrapping `gh pr view 9 --json body`","observation":"Confirmed PR #9 body contained literal `\\n` sequences instead of actual newlines.","createdAt":"2026-05-31T09:37:01.190Z"}
+{"type":"observation_added","observationId":"observation-27","source":"gh pr edit 9 --body-file -","observation":"Replaced PR #9 body using stdin with actual Markdown newlines.","createdAt":"2026-05-31T09:37:01.190Z"}
+{"type":"observation_added","observationId":"observation-28","source":"node script wrapping `gh pr view 9 --json title,body,url`","observation":"Verified PR #9 body no longer contains literal `\\n` sequences and renders as multiline Markdown.","createdAt":"2026-05-31T09:37:01.190Z"}
+{"type":"task_finished","taskId":"task-8","finishedAt":"2026-05-31T09:37:03.494Z"}
+{"type":"task_log_added","logId":"log-16","taskId":"task-8","content":"Fixed the PR body by using `gh pr edit --body-file -` with a heredoc, then verified the body contains actual newlines and no literal `\\n` sequences.","createdAt":"2026-05-31T09:37:03.494Z"}
