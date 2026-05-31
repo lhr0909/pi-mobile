@@ -23,3 +23,10 @@
 {"type":"task_created","taskId":"task-6","title":"Commit the changes and open a pull request","createdAt":"2026-05-31T05:31:21.733Z"}
 {"type":"task_finished","taskId":"task-2","finishedAt":"2026-05-31T05:31:24.587Z"}
 {"type":"task_log_added","logId":"log-4","taskId":"task-2","content":"Plan: update `@earendil-works/pi-coding-agent` to 0.78.0 with pnpm for the host workspace, inspect diffs, address any TypeScript/API breakages, run package-manager resolution checks plus typecheck/tests, then commit only relevant files and open a PR.","createdAt":"2026-05-31T05:31:24.587Z"}
+{"type":"task_started","taskId":"task-3","startedAt":"2026-05-31T05:31:33.559Z"}
+{"type":"task_log_added","logId":"log-5","taskId":"task-3","content":"Updating `@earendil-works/pi-coding-agent` from 0.75.3 to npm latest 0.78.0 in the host workspace using pnpm.","createdAt":"2026-05-31T05:31:33.559Z"}
+{"type":"observation_added","observationId":"observation-11","source":"pnpm --filter @pi-mobile/host add @earendil-works/pi-coding-agent@0.78.0","observation":"Upgrade completed, updating `apps/host/package.json`, `pnpm-lock.yaml`, and local install. pnpm reported 5 deprecated transitive subdependencies and displayed a pnpm update notice, but install succeeded.","createdAt":"2026-05-31T05:32:00.310Z"}
+{"type":"observation_added","observationId":"observation-12","source":"apps/host/package.json","observation":"Host manifest now pins `@earendil-works/pi-coding-agent` to `0.78.0`.","createdAt":"2026-05-31T05:32:00.310Z"}
+{"type":"observation_added","observationId":"observation-13","source":"pnpm --filter @pi-mobile/host list @earendil-works/pi-coding-agent --depth 0","observation":"Workspace now resolves `@earendil-works/pi-coding-agent@0.78.0` for `@pi-mobile/host`.","createdAt":"2026-05-31T05:32:00.310Z"}
+{"type":"task_finished","taskId":"task-3","finishedAt":"2026-05-31T05:32:02.451Z"}
+{"type":"task_log_added","logId":"log-6","taskId":"task-3","content":"Updated the host workspace dependency to 0.78.0 and confirmed pnpm now resolves the latest version locally.","createdAt":"2026-05-31T05:32:02.451Z"}
