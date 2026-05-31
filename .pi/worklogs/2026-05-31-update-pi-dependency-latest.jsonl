@@ -35,3 +35,12 @@
 {"type":"observation_added","observationId":"observation-14","source":"pnpm --filter @pi-mobile/host typecheck","observation":"Targeted host typecheck passed with `@earendil-works/pi-coding-agent@0.78.0`; no SDK compatibility code changes were required.","createdAt":"2026-05-31T05:32:19.884Z"}
 {"type":"task_finished","taskId":"task-4","finishedAt":"2026-05-31T05:32:22.073Z"}
 {"type":"task_log_added","logId":"log-8","taskId":"task-4","content":"The host TypeScript integration compiled successfully against Pi 0.78.0, so no SDK compatibility fixes were needed.","createdAt":"2026-05-31T05:32:22.073Z"}
+{"type":"task_started","taskId":"task-5","startedAt":"2026-05-31T05:32:33.594Z"}
+{"type":"task_log_added","logId":"log-9","taskId":"task-5","content":"Running lockfile/package resolution checks plus root typecheck, test, and build validation for the dependency update.","createdAt":"2026-05-31T05:32:33.594Z"}
+{"type":"observation_added","observationId":"observation-15","source":"pnpm install --frozen-lockfile","observation":"Frozen install passed; lockfile is up to date for the Pi 0.78.0 dependency graph.","createdAt":"2026-05-31T05:32:58.373Z"}
+{"type":"observation_added","observationId":"observation-16","source":"pnpm typecheck","observation":"Root typecheck passed after the dependency update: shared build/typecheck, host typecheck, and mobile typecheck completed successfully.","createdAt":"2026-05-31T05:32:58.373Z"}
+{"type":"observation_added","observationId":"observation-17","source":"pnpm test","observation":"Root test suite passed after the dependency update: shared 3 files/13 tests, host 4 files/17 tests, mobile 5 files/38 tests.","createdAt":"2026-05-31T05:32:58.373Z"}
+{"type":"observation_added","observationId":"observation-18","source":"pnpm build","observation":"Root build passed after the dependency update; shared and host TypeScript builds completed successfully.","createdAt":"2026-05-31T05:32:58.373Z"}
+{"type":"observation_added","observationId":"observation-19","source":"git diff --check","observation":"Whitespace validation reported no issues.","createdAt":"2026-05-31T05:32:58.373Z"}
+{"type":"task_finished","taskId":"task-5","finishedAt":"2026-05-31T05:33:00.525Z"}
+{"type":"task_log_added","logId":"log-10","taskId":"task-5","content":"Validation passed: frozen install, root typecheck, root tests, root build, and whitespace check all completed successfully.","createdAt":"2026-05-31T05:33:00.525Z"}
