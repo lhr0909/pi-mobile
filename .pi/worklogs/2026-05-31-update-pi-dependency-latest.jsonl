@@ -30,3 +30,8 @@
 {"type":"observation_added","observationId":"observation-13","source":"pnpm --filter @pi-mobile/host list @earendil-works/pi-coding-agent --depth 0","observation":"Workspace now resolves `@earendil-works/pi-coding-agent@0.78.0` for `@pi-mobile/host`.","createdAt":"2026-05-31T05:32:00.310Z"}
 {"type":"task_finished","taskId":"task-3","finishedAt":"2026-05-31T05:32:02.451Z"}
 {"type":"task_log_added","logId":"log-6","taskId":"task-3","content":"Updated the host workspace dependency to 0.78.0 and confirmed pnpm now resolves the latest version locally.","createdAt":"2026-05-31T05:32:02.451Z"}
+{"type":"task_started","taskId":"task-4","startedAt":"2026-05-31T05:32:13.274Z"}
+{"type":"task_log_added","logId":"log-7","taskId":"task-4","content":"Checking whether the 0.78.0 SDK introduces TypeScript/API compatibility issues in the host integration.","createdAt":"2026-05-31T05:32:13.274Z"}
+{"type":"observation_added","observationId":"observation-14","source":"pnpm --filter @pi-mobile/host typecheck","observation":"Targeted host typecheck passed with `@earendil-works/pi-coding-agent@0.78.0`; no SDK compatibility code changes were required.","createdAt":"2026-05-31T05:32:19.884Z"}
+{"type":"task_finished","taskId":"task-4","finishedAt":"2026-05-31T05:32:22.073Z"}
+{"type":"task_log_added","logId":"log-8","taskId":"task-4","content":"The host TypeScript integration compiled successfully against Pi 0.78.0, so no SDK compatibility fixes were needed.","createdAt":"2026-05-31T05:32:22.073Z"}
