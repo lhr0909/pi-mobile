@@ -1,197 +1,197 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  HostClient,
-  normalizeBaseUrl,
-  toWebSocketUrl,
+	HostClient,
+	normalizeBaseUrl,
+	toWebSocketUrl,
 } from "../src/host-client.js";
 
 afterEach(() => {
-  vi.restoreAllMocks();
+	vi.restoreAllMocks();
 });
 
 describe("host client URL helpers", () => {
-  it("normalizes base URLs", () => {
-    expect(normalizeBaseUrl(" http://localhost:4739/ ")).toBe(
-      "http://localhost:4739",
-    );
-  });
+	it("normalizes base URLs", () => {
+		expect(normalizeBaseUrl(" http://localhost:4739/ ")).toBe(
+			"http://localhost:4739",
+		);
+	});
 
-  it("builds websocket URLs with optional token", () => {
-    expect(toWebSocketUrl("http://example.test:4739", "secret token")).toBe(
-      "ws://example.test:4739/ws?token=secret%20token",
-    );
-    expect(toWebSocketUrl("https://example.test")).toBe(
-      "wss://example.test/ws",
-    );
-  });
+	it("builds websocket URLs with optional token", () => {
+		expect(toWebSocketUrl("http://example.test:4739", "secret token")).toBe(
+			"ws://example.test:4739/ws?token=secret%20token",
+		);
+		expect(toWebSocketUrl("https://example.test")).toBe(
+			"wss://example.test/ws",
+		);
+	});
 });
 
 describe("HostClient", () => {
-  it("sends bearer auth and parses host status", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            name: "Mac",
-            version: "0.1.0",
-            piCodingAgentVersion: "0.78.1",
-            platform: "darwin",
-            cwd: "/tmp",
-            pid: 1,
-            sdkMode: "sdk",
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        ),
-      );
+	it("sends bearer auth and parses host status", async () => {
+		const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					name: "Mac",
+					version: "0.1.0",
+					piCodingAgentVersion: "0.78.1",
+					platform: "darwin",
+					cwd: "/tmp",
+					pid: 1,
+					sdkMode: "sdk",
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			),
+		);
 
-    const client = new HostClient({
-      baseUrl: "http://host.test",
-      token: "secret",
-    });
+		const client = new HostClient({
+			baseUrl: "http://host.test",
+			token: "secret",
+		});
 
-    await expect(client.status()).resolves.toMatchObject({
-      name: "Mac",
-      piCodingAgentVersion: "0.78.1",
-    });
-    expect(fetchMock).toHaveBeenCalledWith("http://host.test/api/host/status", {
-      headers: { authorization: "Bearer secret" },
-    });
-  });
+		await expect(client.status()).resolves.toMatchObject({
+			name: "Mac",
+			piCodingAgentVersion: "0.78.1",
+		});
+		expect(fetchMock).toHaveBeenCalledWith("http://host.test/api/host/status", {
+			headers: { authorization: "Bearer secret" },
+		});
+	});
 
-  it("lists sessions for encoded host paths", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          sessions: [
-            {
-              id: "s1",
-              cwd: "/Users/simon/Documents/Project A",
-              title: "Project A",
-              sessionFile: "/tmp/session.jsonl",
-              runState: "idle",
-              messageCount: 3,
-              updatedAt: "2026-05-19T00:00:00.000Z",
-            },
-          ],
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
-    const client = new HostClient({ baseUrl: "http://host.test" });
+	it("lists sessions for encoded host paths", async () => {
+		const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					sessions: [
+						{
+							id: "s1",
+							cwd: "/Users/simon/Documents/Project A",
+							title: "Project A",
+							sessionFile: "/tmp/session.jsonl",
+							runState: "idle",
+							messageCount: 3,
+							updatedAt: "2026-05-19T00:00:00.000Z",
+						},
+					],
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			),
+		);
+		const client = new HostClient({ baseUrl: "http://host.test" });
 
-    await expect(client.listSessions("/Users/simon/Documents/Project A")).resolves.toMatchObject([
-      { id: "s1", title: "Project A" },
-    ]);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://host.test/api/sessions?cwd=%2FUsers%2Fsimon%2FDocuments%2FProject%20A",
-      { headers: {} },
-    );
-  });
+		await expect(
+			client.listSessions("/Users/simon/Documents/Project A"),
+		).resolves.toMatchObject([{ id: "s1", title: "Project A" }]);
+		expect(fetchMock).toHaveBeenCalledWith(
+			"http://host.test/api/sessions?cwd=%2FUsers%2Fsimon%2FDocuments%2FProject%20A",
+			{ headers: {} },
+		);
+	});
 
-  it("lists host directories", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          path: "/Users/simon",
-          parentPath: "/Users",
-          entries: [{ name: "project", path: "/Users/simon/project" }],
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
-    const client = new HostClient({ baseUrl: "http://host.test" });
+	it("lists host directories", async () => {
+		const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					path: "/Users/simon",
+					parentPath: "/Users",
+					entries: [{ name: "project", path: "/Users/simon/project" }],
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			),
+		);
+		const client = new HostClient({ baseUrl: "http://host.test" });
 
-    await expect(client.listDirectories("~/code projects")).resolves.toMatchObject({
-      path: "/Users/simon",
-      entries: [{ name: "project" }],
-    });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://host.test/api/directories?path=~%2Fcode%20projects",
-      { headers: {} },
-    );
-  });
+		await expect(
+			client.listDirectories("~/code projects"),
+		).resolves.toMatchObject({
+			path: "/Users/simon",
+			entries: [{ name: "project" }],
+		});
+		expect(fetchMock).toHaveBeenCalledWith(
+			"http://host.test/api/directories?path=~%2Fcode%20projects",
+			{ headers: {} },
+		);
+	});
 
-  it("opens sessions and sends prompt commands", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ session: { id: "s1" }, timeline: [], nextSeq: 1 }),
-          {
-            status: 201,
-            headers: { "content-type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ accepted: true }), {
-          status: 202,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-    const client = new HostClient({ baseUrl: "http://host.test" });
+	it("opens sessions and sends prompt commands", async () => {
+		const fetchMock = vi
+			.spyOn(globalThis, "fetch")
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({ session: { id: "s1" }, timeline: [], nextSeq: 1 }),
+					{
+						status: 201,
+						headers: { "content-type": "application/json" },
+					},
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ accepted: true }), {
+					status: 202,
+					headers: { "content-type": "application/json" },
+				}),
+			);
+		const client = new HostClient({ baseUrl: "http://host.test" });
 
-    await client.openSession({ cwd: "/tmp/project", mode: "new" });
-    await client.prompt("s1", { message: "hello" });
+		await client.openSession({ cwd: "/tmp/project", mode: "new" });
+		await client.prompt("s1", { message: "hello" });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "http://host.test/api/sessions",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ cwd: "/tmp/project", mode: "new" }),
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "http://host.test/api/sessions/s1/commands/prompt",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ message: "hello" }),
-      }),
-    );
-  });
+		expect(fetchMock).toHaveBeenNthCalledWith(
+			1,
+			"http://host.test/api/sessions",
+			expect.objectContaining({
+				method: "POST",
+				body: JSON.stringify({ cwd: "/tmp/project", mode: "new" }),
+			}),
+		);
+		expect(fetchMock).toHaveBeenNthCalledWith(
+			2,
+			"http://host.test/api/sessions/s1/commands/prompt",
+			expect.objectContaining({
+				method: "POST",
+				body: JSON.stringify({ message: "hello" }),
+			}),
+		);
+	});
 
-  it("surfaces API errors", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      }),
-    );
+	it("surfaces API errors", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ error: "Unauthorized" }), {
+				status: 401,
+				headers: { "content-type": "application/json" },
+			}),
+		);
 
-    await expect(
-      new HostClient({ baseUrl: "http://host.test" }).status(),
-    ).rejects.toThrow("Unauthorized");
-  });
+		await expect(
+			new HostClient({ baseUrl: "http://host.test" }).status(),
+		).rejects.toThrow("Unauthorized");
+	});
 
-  it("connects websocket event streams", () => {
-    const sockets: FakeSocket[] = [];
-    const client = new HostClient({
-      baseUrl: "http://host.test",
-      webSocketFactory: (url) => {
-        const socket = new FakeSocket(url);
-        sockets.push(socket);
-        return socket as unknown as WebSocket;
-      },
-    });
-    const events: unknown[] = [];
+	it("connects websocket event streams", () => {
+		const sockets: FakeSocket[] = [];
+		const client = new HostClient({
+			baseUrl: "http://host.test",
+			webSocketFactory: (url) => {
+				const socket = new FakeSocket(url);
+				sockets.push(socket);
+				return socket as unknown as WebSocket;
+			},
+		});
+		const events: unknown[] = [];
 
-    client.connectEvents((event) => events.push(event));
-    sockets[0]?.emit({ type: "host_status", status: { name: "Mac" } });
+		client.connectEvents((event) => events.push(event));
+		sockets[0]?.emit({ type: "host_status", status: { name: "Mac" } });
 
-    expect(sockets[0]?.url).toBe("ws://host.test/ws");
-    expect(events).toEqual([expect.objectContaining({ type: "host_status" })]);
-  });
+		expect(sockets[0]?.url).toBe("ws://host.test/ws");
+		expect(events).toEqual([expect.objectContaining({ type: "host_status" })]);
+	});
 });
 
 class FakeSocket {
-  onmessage: ((event: { data: string }) => void) | null = null;
+	onmessage: ((event: { data: string }) => void) | null = null;
 
-  constructor(readonly url: string) {}
+	constructor(readonly url: string) {}
 
-  emit(payload: unknown): void {
-    this.onmessage?.({ data: JSON.stringify(payload) });
-  }
+	emit(payload: unknown): void {
+		this.onmessage?.({ data: JSON.stringify(payload) });
+	}
 }
