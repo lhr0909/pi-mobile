@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { VERSION as PI_CODING_AGENT_VERSION } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { HostController } from "../src/host-controller.js";
@@ -8,130 +9,150 @@ import { MobileHostServer } from "../src/server/mobile-host-server.js";
 import { FakeRuntimeFactory } from "./fakes.js";
 
 async function startServer(
-  options: { token?: string; corsOrigin?: string } = {},
+	options: { token?: string; corsOrigin?: string } = {},
 ) {
-  const factory = new FakeRuntimeFactory();
-  const controller = new HostController(factory);
-  const server = new MobileHostServer(controller, options);
-  await server.listen(0, "localhost");
-  const baseUrl = `http://localhost:${server.address().port}`;
-  return { baseUrl, controller, factory, server };
+	const factory = new FakeRuntimeFactory();
+	const controller = new HostController(factory);
+	const server = new MobileHostServer(controller, options);
+	await server.listen(0, "localhost");
+	const baseUrl = `http://localhost:${server.address().port}`;
+	return { baseUrl, controller, factory, server };
 }
 
 describe("MobileHostServer", () => {
-  it("opens a session and accepts prompt commands", async () => {
-    const { baseUrl, factory, server } = await startServer();
-    try {
-      const openResponse = await fetch(`${baseUrl}/api/sessions`, {
-        method: "POST",
-        body: JSON.stringify({ cwd: "/tmp/project" }),
-      });
-      expect(openResponse.status).toBe(201);
-      const snapshot = (await openResponse.json()) as any;
+	it("reports the embedded Pi coding agent version in host status", async () => {
+		const { baseUrl, server } = await startServer();
+		try {
+			const response = await fetch(`${baseUrl}/api/host/status`);
 
-      const promptResponse = await fetch(
-        `${baseUrl}/api/sessions/${snapshot.session.id}/commands/prompt`,
-        {
-          method: "POST",
-          body: JSON.stringify({ message: "hello" }),
-        },
-      );
+			expect(response.status).toBe(200);
+			await expect(response.json()).resolves.toMatchObject({
+				piCodingAgentVersion: PI_CODING_AGENT_VERSION,
+			});
+		} finally {
+			await server.close();
+		}
+	});
 
-      expect(promptResponse.status).toBe(202);
-      expect(factory.created[0]?.prompts[0]?.message).toBe("hello");
-    } finally {
-      await server.close();
-    }
-  });
+	it("opens a session and accepts prompt commands", async () => {
+		const { baseUrl, factory, server } = await startServer();
+		try {
+			const openResponse = await fetch(`${baseUrl}/api/sessions`, {
+				method: "POST",
+				body: JSON.stringify({ cwd: "/tmp/project" }),
+			});
+			expect(openResponse.status).toBe(201);
+			const snapshot = (await openResponse.json()) as any;
 
-  it("lists host directories", async () => {
-    const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "pi-mobile-server-directories-"));
-    await fs.mkdir(path.join(tempDirectory, "project"));
-    await fs.writeFile(path.join(tempDirectory, "file.txt"), "skip");
-    const { baseUrl, server } = await startServer();
-    try {
-      const response = await fetch(`${baseUrl}/api/directories?path=${encodeURIComponent(tempDirectory)}`);
+			const promptResponse = await fetch(
+				`${baseUrl}/api/sessions/${snapshot.session.id}/commands/prompt`,
+				{
+					method: "POST",
+					body: JSON.stringify({ message: "hello" }),
+				},
+			);
 
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toMatchObject({
-        path: tempDirectory,
-        entries: [{ name: "project", path: path.join(tempDirectory, "project") }],
-      });
-    } finally {
-      await server.close();
-    }
-  });
+			expect(promptResponse.status).toBe(202);
+			expect(factory.created[0]?.prompts[0]?.message).toBe("hello");
+		} finally {
+			await server.close();
+		}
+	});
 
-  it("requires bearer auth when a token is configured", async () => {
-    const { baseUrl, server } = await startServer({ token: "secret" });
-    try {
-      const denied = await fetch(`${baseUrl}/api/host/status`);
-      expect(denied.status).toBe(401);
+	it("lists host directories", async () => {
+		const tempDirectory = await fs.mkdtemp(
+			path.join(os.tmpdir(), "pi-mobile-server-directories-"),
+		);
+		await fs.mkdir(path.join(tempDirectory, "project"));
+		await fs.writeFile(path.join(tempDirectory, "file.txt"), "skip");
+		const { baseUrl, server } = await startServer();
+		try {
+			const response = await fetch(
+				`${baseUrl}/api/directories?path=${encodeURIComponent(tempDirectory)}`,
+			);
 
-      const allowed = await fetch(`${baseUrl}/api/host/status`, {
-        headers: { authorization: "Bearer secret" },
-      });
-      expect(allowed.status).toBe(200);
-    } finally {
-      await server.close();
-    }
-  });
+			expect(response.status).toBe(200);
+			await expect(response.json()).resolves.toMatchObject({
+				path: tempDirectory,
+				entries: [
+					{ name: "project", path: path.join(tempDirectory, "project") },
+				],
+			});
+		} finally {
+			await server.close();
+		}
+	});
 
-  it("handles CORS preflight when a CORS origin is configured", async () => {
-    const { baseUrl, server } = await startServer({
-      corsOrigin: "http://localhost:8081",
-    });
-    try {
-      const response = await fetch(`${baseUrl}/api/sessions`, {
-        method: "OPTIONS",
-        headers: {
-          origin: "http://localhost:8081",
-          "access-control-request-method": "POST",
-        },
-      });
+	it("requires bearer auth when a token is configured", async () => {
+		const { baseUrl, server } = await startServer({ token: "secret" });
+		try {
+			const denied = await fetch(`${baseUrl}/api/host/status`);
+			expect(denied.status).toBe(401);
 
-      expect(response.status).toBe(204);
-      expect(response.headers.get("access-control-allow-origin")).toBe(
-        "http://localhost:8081",
-      );
-      expect(response.headers.get("access-control-allow-headers")).toContain(
-        "authorization",
-      );
-    } finally {
-      await server.close();
-    }
-  });
+			const allowed = await fetch(`${baseUrl}/api/host/status`, {
+				headers: { authorization: "Bearer secret" },
+			});
+			expect(allowed.status).toBe(200);
+		} finally {
+			await server.close();
+		}
+	});
 
-  it("broadcasts opened sessions over websocket", async () => {
-    const { baseUrl, server } = await startServer();
-    const wsUrl = baseUrl.replace("http://", "ws://") + "/ws";
-    const socket = new WebSocket(wsUrl);
-    const messages: any[] = [];
-    socket.on("message", (data) => messages.push(JSON.parse(String(data))));
+	it("handles CORS preflight when a CORS origin is configured", async () => {
+		const { baseUrl, server } = await startServer({
+			corsOrigin: "http://localhost:8081",
+		});
+		try {
+			const response = await fetch(`${baseUrl}/api/sessions`, {
+				method: "OPTIONS",
+				headers: {
+					origin: "http://localhost:8081",
+					"access-control-request-method": "POST",
+				},
+			});
 
-    try {
-      await new Promise<void>((resolve) =>
-        socket.once("open", () => resolve()),
-      );
-      await fetch(`${baseUrl}/api/sessions`, {
-        method: "POST",
-        body: JSON.stringify({ cwd: "/tmp/project" }),
-      });
-      await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(response.status).toBe(204);
+			expect(response.headers.get("access-control-allow-origin")).toBe(
+				"http://localhost:8081",
+			);
+			expect(response.headers.get("access-control-allow-headers")).toContain(
+				"authorization",
+			);
+		} finally {
+			await server.close();
+		}
+	});
 
-      expect(messages).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ type: "host_status" }),
-        ]),
-      );
-      expect(messages).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ type: "session_opened" }),
-        ]),
-      );
-    } finally {
-      socket.close();
-      await server.close();
-    }
-  });
+	it("broadcasts opened sessions over websocket", async () => {
+		const { baseUrl, server } = await startServer();
+		const wsUrl = baseUrl.replace("http://", "ws://") + "/ws";
+		const socket = new WebSocket(wsUrl);
+		const messages: any[] = [];
+		socket.on("message", (data) => messages.push(JSON.parse(String(data))));
+
+		try {
+			await new Promise<void>((resolve) =>
+				socket.once("open", () => resolve()),
+			);
+			await fetch(`${baseUrl}/api/sessions`, {
+				method: "POST",
+				body: JSON.stringify({ cwd: "/tmp/project" }),
+			});
+			await new Promise((resolve) => setTimeout(resolve, 20));
+
+			expect(messages).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ type: "host_status" }),
+				]),
+			);
+			expect(messages).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ type: "session_opened" }),
+				]),
+			);
+		} finally {
+			socket.close();
+			await server.close();
+		}
+	});
 });
