@@ -34,3 +34,9 @@
 {"type":"task_created","taskId":"task-6","title":"Implement Pi coding agent version status and mobile display","createdAt":"2026-06-06T07:46:50.571Z"}
 {"type":"task_created","taskId":"task-7","title":"Validate dependency and code changes","createdAt":"2026-06-06T07:46:50.571Z"}
 {"type":"task_created","taskId":"task-8","title":"Commit changes and open a pull request","createdAt":"2026-06-06T07:46:50.571Z"}
+{"type":"task_started","taskId":"task-4","startedAt":"2026-06-06T07:47:05.354Z"}
+{"type":"task_log_added","logId":"log-7","taskId":"task-4","content":"Updating the host workspace dependency from 0.78.0 to npm latest 0.78.1 using pnpm so package.json, lockfile, and local node_modules stay consistent.","createdAt":"2026-06-06T07:47:05.354Z"}
+{"type":"observation_added","observationId":"observation-16","source":"pnpm --filter @pi-mobile/host add @earendil-works/pi-coding-agent@0.78.1","observation":"Dependency upgrade succeeded, updating apps/host/package.json, pnpm-lock.yaml, local node_modules, and reporting the same 5 deprecated transitive subdependency warnings as prior upgrades plus a pnpm update notice.","createdAt":"2026-06-06T07:47:25.071Z"}
+{"type":"observation_added","observationId":"observation-17","source":"pnpm --filter @pi-mobile/host list @earendil-works/pi-coding-agent --depth 0","observation":"Host workspace now resolves @earendil-works/pi-coding-agent@0.78.1.","createdAt":"2026-06-06T07:47:25.071Z"}
+{"type":"task_finished","taskId":"task-4","finishedAt":"2026-06-06T07:47:27.883Z"}
+{"type":"task_log_added","logId":"log-8","taskId":"task-4","content":"Updated @earendil-works/pi-coding-agent to 0.78.1 in apps/host/package.json and pnpm-lock.yaml, and confirmed the host workspace resolves 0.78.1 locally.","createdAt":"2026-06-06T07:47:27.883Z"}
