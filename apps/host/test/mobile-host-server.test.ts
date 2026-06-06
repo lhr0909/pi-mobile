@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { VERSION as PI_CODING_AGENT_VERSION } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { HostController } from "../src/host-controller.js";
@@ -19,6 +20,20 @@ async function startServer(
 }
 
 describe("MobileHostServer", () => {
+  it("reports the embedded Pi coding agent version in host status", async () => {
+    const { baseUrl, server } = await startServer();
+    try {
+      const response = await fetch(`${baseUrl}/api/host/status`);
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        piCodingAgentVersion: PI_CODING_AGENT_VERSION,
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("opens a session and accepts prompt commands", async () => {
     const { baseUrl, factory, server } = await startServer();
     try {

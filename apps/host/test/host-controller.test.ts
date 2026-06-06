@@ -1,11 +1,22 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { VERSION as PI_CODING_AGENT_VERSION } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { HostController } from "../src/host-controller.js";
 import { FakeRuntimeFactory } from "./fakes.js";
 
 describe("HostController", () => {
+  it("reports host and Pi coding agent status metadata", () => {
+    const controller = new HostController(new FakeRuntimeFactory());
+
+    expect(controller.getStatus()).toMatchObject({
+      version: "0.1.0",
+      piCodingAgentVersion: PI_CODING_AGENT_VERSION,
+      sdkMode: "sdk",
+    });
+  });
+
   it("lists stored sessions and delegates open runner commands", async () => {
     const factory = new FakeRuntimeFactory();
     const controller = new HostController(factory);

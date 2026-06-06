@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { VERSION as PI_CODING_AGENT_VERSION } from "@earendil-works/pi-coding-agent";
 import type {
   DirectoryList,
   ExtensionUiResponse,
@@ -25,6 +26,7 @@ export class HostController {
     return {
       name: os.hostname(),
       version: "0.1.0",
+      piCodingAgentVersion: PI_CODING_AGENT_VERSION,
       platform: process.platform,
       cwd: process.cwd(),
       pid: process.pid,

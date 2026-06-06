@@ -4,6 +4,7 @@ import { createInitialAppViewState, isAbsoluteHostPath, isHostWorkspacePath, red
 const hostStatus = {
   name: "Mac",
   version: "0.1.0",
+  piCodingAgentVersion: "0.78.1",
   platform: "darwin",
   cwd: "/tmp/project",
   pid: 1,
@@ -18,7 +19,7 @@ describe("app view model", () => {
     const connected = reduceAppViewState(connecting, { type: "connected", status: hostStatus });
 
     expect(connected.connectionState).toBe("connected");
-    expect(connected.client.connectionMessage).toBe("Mac on darwin");
+    expect(connected.client.connectionMessage).toBe("Mac on darwin · Pi coding agent v0.78.1");
   });
 
   it("seeds the workspace path from the host cwd when the current path is not absolute", () => {

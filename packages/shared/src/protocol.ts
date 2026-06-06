@@ -18,6 +18,7 @@ export type ExtensionUiMethod =
 export interface HostStatus {
   name: string;
   version: string;
+  piCodingAgentVersion: string;
   platform: string;
   cwd: string;
   pid: number;

@@ -17,6 +17,23 @@ const snapshot: SessionSnapshot = {
 };
 
 describe("mobile client reducer", () => {
+  it("includes the Pi coding agent version in host connection messages", () => {
+    const connected = reduceHostEvent(createMobileClientState(), {
+      type: "host_status",
+      status: {
+        name: "Mac",
+        version: "0.1.0",
+        piCodingAgentVersion: "0.78.1",
+        platform: "darwin",
+        cwd: "/tmp/project",
+        pid: 1,
+        sdkMode: "sdk",
+      },
+    });
+
+    expect(connected.connectionMessage).toBe("Mac on darwin · Pi coding agent v0.78.1");
+  });
+
   it("opens a session and applies assistant deltas", () => {
     const opened = reduceHostEvent(createMobileClientState(), {
       type: "session_opened",

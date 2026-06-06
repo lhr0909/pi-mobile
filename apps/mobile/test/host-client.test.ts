@@ -35,6 +35,7 @@ describe("HostClient", () => {
           JSON.stringify({
             name: "Mac",
             version: "0.1.0",
+            piCodingAgentVersion: "0.78.1",
             platform: "darwin",
             cwd: "/tmp",
             pid: 1,
@@ -49,7 +50,10 @@ describe("HostClient", () => {
       token: "secret",
     });
 
-    await expect(client.status()).resolves.toMatchObject({ name: "Mac" });
+    await expect(client.status()).resolves.toMatchObject({
+      name: "Mac",
+      piCodingAgentVersion: "0.78.1",
+    });
     expect(fetchMock).toHaveBeenCalledWith("http://host.test/api/host/status", {
       headers: { authorization: "Bearer secret" },
     });

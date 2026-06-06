@@ -1,4 +1,4 @@
-import type { HostEvent, SessionSnapshot, SessionState, TimelineItem } from "./protocol.js";
+import type { HostEvent, HostStatus, SessionSnapshot, SessionState, TimelineItem } from "./protocol.js";
 
 export interface MobileClientState {
   sessions: Record<string, SessionSnapshot>;
@@ -13,7 +13,7 @@ export function createMobileClientState(): MobileClientState {
 export function reduceHostEvent(state: MobileClientState, event: HostEvent): MobileClientState {
   switch (event.type) {
     case "host_status":
-      return { ...state, connectionMessage: `${event.status.name} on ${event.status.platform}` };
+      return { ...state, connectionMessage: formatHostConnectionMessage(event.status) };
     case "session_opened":
       return upsertSession(state, event.snapshot, event.snapshot.session.id);
     case "session_updated":
@@ -38,6 +38,10 @@ export function reduceHostEvent(state: MobileClientState, event: HostEvent): Mob
     default:
       return state;
   }
+}
+
+function formatHostConnectionMessage(status: HostStatus): string {
+  return `${status.name} on ${status.platform} · Pi coding agent v${status.piCodingAgentVersion}`;
 }
 
 function upsertSession(
