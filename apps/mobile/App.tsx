@@ -72,6 +72,11 @@ import {
   normalizeReadOutput,
   replaceTabs,
 } from "./src/tool-rendering";
+import {
+  PROMPT_INPUT_LINE_HEIGHT,
+  PROMPT_INPUT_MAX_HEIGHT,
+  PROMPT_INPUT_VERTICAL_PADDING,
+} from "./src/prompt-input-layout";
 
 const DEFAULT_HOST_URL = "http://localhost:4739";
 const HOME_DIRECTORY_PATH = "~";
@@ -1748,6 +1753,7 @@ function Composer({
       <TextInput
         accessibilityLabel="Prompt"
         multiline
+        scrollEnabled
         placeholder="Ask pi to do something…"
         placeholderTextColor={palette.dim}
         value={prompt}
@@ -2320,10 +2326,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     color: palette.text,
     fontSize: 16,
-    lineHeight: 24,
+    lineHeight: PROMPT_INPUT_LINE_HEIGHT,
+    maxHeight: PROMPT_INPUT_MAX_HEIGHT,
     minHeight: 86,
     paddingHorizontal: 10,
-    paddingVertical: 12,
+    paddingVertical: PROMPT_INPUT_VERTICAL_PADDING,
     textAlignVertical: "top",
   },
   commandRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
